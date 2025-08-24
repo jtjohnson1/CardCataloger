@@ -97,10 +97,11 @@ services:
     volumes:
       - ./card_images:/app/card_images:ro
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000/api/system/status"]
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/api/system/status', (res) => { process.exit(res.statusCode === 200 ? 0 : 1) })"]
       interval: 30s
       timeout: 10s
       retries: 3
+      start_period: 10s
 
   # Frontend Web Application
   frontend:
@@ -119,11 +120,10 @@ services:
 
 volumes:
   mongodb_data:
-    name: cardcataloger_mongodb_data
+    driver: local
   ollama_data:
-    name: cardcataloger_ollama_data
+    driver: local
 
 networks:
   cardcataloger-network:
-    name: cardcataloger-network
     driver: bridge

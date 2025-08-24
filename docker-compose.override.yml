@@ -13,19 +13,6 @@ services:
       - NODE_ENV=development
       - DOCKER_CONTAINER=true
 
-  frontend:
-    build:
-      context: ./client
-      dockerfile: Dockerfile.dev
-    ports:
-      - "5173:5173"
-    volumes:
-      - ./client:/app:cached
-      - /app/node_modules
-      - vite_cache:/tmp/vite-cache
-    environment:
-      - NODE_ENV=development
-
   mongodb:
     volumes:
       - mongodb_dev_data:/data/db
@@ -34,6 +21,7 @@ services:
 
 volumes:
   mongodb_dev_data:
-    name: cardcataloger_mongodb_dev_data
-  vite_cache:
-    name: cardcataloger_vite_cache
+    driver: local
+  # Remove vite_cache as it's not needed for production build
+  # vite_cache:
+  #   driver: local
