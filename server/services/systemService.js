@@ -5,7 +5,9 @@ class SystemService {
   constructor() {
     // Use Docker service name when in Docker environment, localhost otherwise
     this.ollamaBaseUrl = process.env.OLLAMA_BASE_URL || 'http://localhost:11434';
+    this.isDevelopment = process.env.NODE_ENV !== 'production' && !process.env.DOCKER_CONTAINER;
     console.log(`SystemService initialized with Ollama URL: ${this.ollamaBaseUrl}`);
+    console.log(`Running in ${this.isDevelopment ? 'development' : 'production'} mode`);
   }
 
   async checkDatabaseHealth() {
@@ -39,7 +41,7 @@ class SystemService {
       
       // Make a simple request to Ollama API to check if it's running
       const response = await axios.get(`${this.ollamaBaseUrl}/api/tags`, {
-        timeout: 10000, // 10 second timeout for Docker environment
+        timeout: this.isDevelopment ? 5000 : 10000, // Shorter timeout in development
         headers: {
           'Content-Type': 'application/json'
         }
@@ -70,9 +72,22 @@ class SystemService {
         return { healthy: false, latency, error: `Unexpected status: ${response.status}` };
       }
     } catch (error) {
+      // In development mode, don't log connection errors as they're expected
+      if (this.isDevelopment) {
+        console.log('Ollama not available in development mode (this is normal)');
+        return {
+          healthy: false,
+          latency: null,
+          error: null, // No error in development mode
+          warning: 'Ollama not installed (optional in development)',
+          developmentNote: 'AI features disabled - install Ollama or use Docker for full functionality'
+        };
+      }
+
+      // Only log actual errors in production
       console.error('Ollama health check failed:', error.message);
-      
-      // Provide more specific error messages for Docker environment
+
+      // Provide more specific error messages for production/Docker environment
       let errorMessage = error.message;
       if (error.code === 'ECONNREFUSED') {
         errorMessage = `Ollama service is not running or not accessible at ${this.ollamaBaseUrl}`;
@@ -96,10 +111,23 @@ class SystemService {
 
       // Determine overall status
       let overall = 'healthy';
-      if (!databaseHealth.healthy && !ollamaHealth.healthy) {
-        overall = 'error';
-      } else if (!databaseHealth.healthy || !ollamaHealth.healthy) {
-        overall = 'warning';
+      
+      // In development mode, only require database to be healthy
+      if (this.isDevelopment) {
+        if (!databaseHealth.healthy) {
+          overall = 'error';
+        } else {
+          // In development mode, if database is healthy, system is healthy
+          // even without Ollama (since it's optional)
+          overall = 'healthy';
+        }
+      } else {
+        // In production/Docker mode, require both services
+        if (!databaseHealth.healthy && !ollamaHealth.healthy) {
+          overall = 'error';
+        } else if (!databaseHealth.healthy || !ollamaHealth.healthy) {
+          overall = 'warning';
+        }
       }
 
       // Include Docker environment information
@@ -113,13 +141,14 @@ class SystemService {
           environment: {
             nodeEnv: process.env.NODE_ENV || 'development',
             dockerized: !!process.env.DOCKER_CONTAINER || process.env.NODE_ENV === 'production',
-            ollamaUrl: this.ollamaBaseUrl
+            ollamaUrl: this.ollamaBaseUrl,
+            developmentMode: this.isDevelopment
           }
         },
         timestamp: new Date().toISOString()
       };
 
-      console.log(`System status check completed - Overall: ${overall}`);
+      console.log(`System status check completed - Overall: ${overall} (Development mode: ${this.isDevelopment})`);
       return status;
     } catch (error) {
       console.error('System status check failed:', error.message);

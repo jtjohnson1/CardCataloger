@@ -1,40 +1,46 @@
-# Development overrides
-version: '3.8'
-
-# Development overrides - only used when explicitly specified
-# This file is automatically loaded by docker-compose
-# To use production mode, run: docker-compose -f docker-compose.yml up -d
-
+# Development-specific configurations for Docker services
 services:
-  # Development overrides for backend
+  # Backend development configuration
   backend:
     build:
       context: ./server
       dockerfile: Dockerfile.dev
-    environment:
-      - NODE_ENV=development
-      - OLLAMA_BASE_URL=http://ollama:11434
     volumes:
-      - ./server:/app:cached
+      - ./server:/app
       - /app/node_modules
       - ./card-images:/app/card-images:ro
-    command: ["npm", "run", "dev"]
+    environment:
+      - NODE_ENV=development
+      - DATABASE_URL=mongodb://admin:password@mongodb:27017/CardCataloger?authSource=admin
+      - OLLAMA_BASE_URL=http://ollama:11434
+      - DOCKER_CONTAINER=true
+    command: npm run dev
 
-  # Development overrides for frontend  
+  # Frontend development configuration  
   frontend:
     build:
       context: ./client
       dockerfile: Dockerfile.dev
+    volumes:
+      - ./client:/app
+      - /app/node_modules
+      - vite_cache:/tmp/vite-cache
+    environment:
+      - NODE_ENV=development
+      - VITE_CACHE_DIR=/tmp/vite-cache
+    command: npm run dev -- --host 0.0.0.0
     ports:
       - "5173:5173"
-      - "8000:5173"  # Also expose on port 8000 for consistency
-    volumes:
-      - ./client:/app:cached
-      - /app/node_modules
-    environment:
-      - VITE_API_URL=http://localhost:3000
 
-  # Development database with local volume
+  # MongoDB development configuration
   mongodb:
+    ports:
+      - "27017:27017"
     volumes:
-      - ./data/mongodb:/data/db
+      - mongodb_dev_data:/data/db
+
+volumes:
+  mongodb_dev_data:
+    driver: local
+  vite_cache:
+    driver: local

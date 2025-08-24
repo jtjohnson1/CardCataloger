@@ -13,11 +13,23 @@ RUN npm install
 RUN addgroup -g 1001 -S nodejs
 RUN adduser -S cardcataloger -u 1001
 
-# Change ownership
-RUN chown -R cardcataloger:nodejs /app
+# Copy source code
+COPY . .
+
+# Create necessary directories and set proper permissions
+RUN mkdir -p /app/node_modules/.vite \
+    && mkdir -p /app/dist \
+    && mkdir -p /tmp/vite-cache \
+    && chown -R cardcataloger:nodejs /app \
+    && chown -R cardcataloger:nodejs /tmp/vite-cache
+
+# Switch to non-root user
 USER cardcataloger
 
 EXPOSE 5173
+
+# Set Vite cache directory to a writable location
+ENV VITE_CACHE_DIR=/tmp/vite-cache
 
 # Start development server
 CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0"]

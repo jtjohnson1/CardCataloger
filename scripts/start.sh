@@ -19,6 +19,12 @@ if ! command -v docker-compose >/dev/null 2>&1; then
     exit 1
 fi
 
+# Stop any local development servers that might be running
+echo "🛑 Stopping any local development servers..."
+pkill -f "npm run start" || true
+pkill -f "nodemon" || true
+pkill -f "vite" || true
+
 # Check for NVIDIA GPU support if available
 if command -v nvidia-smi >/dev/null 2>&1; then
     echo "🎮 NVIDIA GPU detected, enabling GPU support for Ollama..."
@@ -44,6 +50,10 @@ fi
 # Stop any existing containers
 echo "🛑 Stopping any existing containers..."
 docker-compose down --remove-orphans || true
+
+# Clean up any orphaned volumes or networks
+echo "🧹 Cleaning up..."
+docker system prune -f || true
 
 # Pull latest images
 echo "📥 Pulling latest Docker images..."
@@ -104,11 +114,13 @@ echo "🎉 CardCataloger is now running!"
 echo ""
 echo "📱 Access the application:"
 echo "   Web Interface: http://localhost:8000"
+echo "   Dev Frontend:  http://localhost:5173 (development mode)"
 echo "   API Status:    http://localhost:3000/api/system/status"
 echo "   Ollama API:    http://localhost:11434/api/tags"
 echo ""
 echo "📊 Monitor services:"
 echo "   docker-compose logs -f          # View all logs"
+echo "   docker-compose logs frontend    # View frontend logs"
 echo "   docker-compose ps               # Check service status"
 echo "   ./scripts/stop.sh              # Stop all services"
 echo ""
@@ -116,4 +128,7 @@ echo "🔧 Troubleshooting:"
 echo "   If services fail to start, check the logs above"
 echo "   Ensure you have enough disk space and memory"
 echo "   For GPU issues, verify NVIDIA Docker runtime is installed"
+echo ""
+echo "⚠️  IMPORTANT: Do not run 'npm run start' while Docker is running!"
+echo "    Use either Docker OR local development, not both simultaneously."
 echo ""
