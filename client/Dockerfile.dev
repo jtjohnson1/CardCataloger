@@ -9,19 +9,21 @@ COPY package*.json ./
 # Install all dependencies
 RUN npm install
 
-# Create non-root user
+# Create non-root user with proper permissions
 RUN addgroup -g 1001 -S nodejs
 RUN adduser -S cardcataloger -u 1001
 
 # Copy source code
 COPY . .
 
-# Create necessary directories and set proper permissions
+# Create necessary directories with proper permissions
 RUN mkdir -p /app/node_modules/.vite \
     && mkdir -p /app/dist \
     && mkdir -p /tmp/vite-cache \
+    && mkdir -p /app/.vite \
     && chown -R cardcataloger:nodejs /app \
-    && chown -R cardcataloger:nodejs /tmp/vite-cache
+    && chown -R cardcataloger:nodejs /tmp/vite-cache \
+    && chmod -R 755 /app
 
 # Switch to non-root user
 USER cardcataloger
@@ -31,5 +33,5 @@ EXPOSE 5173
 # Set Vite cache directory to a writable location
 ENV VITE_CACHE_DIR=/tmp/vite-cache
 
-# Start development server
-CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0"]
+# Start development server with proper permissions
+CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0", "--clearScreen", "false"]

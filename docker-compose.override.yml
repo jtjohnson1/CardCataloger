@@ -1,46 +1,40 @@
-# Development-specific configurations for Docker services
+# Development overrides
+version: '3.8'
+
 services:
-  # Backend development configuration
   backend:
     build:
       context: ./server
       dockerfile: Dockerfile.dev
     volumes:
-      - ./server:/app
+      - ./server:/app:cached
       - /app/node_modules
-      - ./card-images:/app/card-images:ro
+      - ./card_images:/app/card_images:ro
     environment:
       - NODE_ENV=development
-      - DATABASE_URL=mongodb://admin:password@mongodb:27017/CardCataloger?authSource=admin
-      - OLLAMA_BASE_URL=http://ollama:11434
       - DOCKER_CONTAINER=true
-    command: npm run dev
 
-  # Frontend development configuration  
   frontend:
     build:
       context: ./client
       dockerfile: Dockerfile.dev
+    ports:
+      - "5173:5173"
     volumes:
-      - ./client:/app
+      - ./client:/app:cached
       - /app/node_modules
       - vite_cache:/tmp/vite-cache
     environment:
       - NODE_ENV=development
-      - VITE_CACHE_DIR=/tmp/vite-cache
-    command: npm run dev -- --host 0.0.0.0
-    ports:
-      - "5173:5173"
 
-  # MongoDB development configuration
   mongodb:
-    ports:
-      - "27017:27017"
     volumes:
       - mongodb_dev_data:/data/db
+    ports:
+      - "27017:27017"
 
 volumes:
   mongodb_dev_data:
-    driver: local
+    name: cardcataloger_mongodb_dev_data
   vite_cache:
-    driver: local
+    name: cardcataloger_vite_cache
