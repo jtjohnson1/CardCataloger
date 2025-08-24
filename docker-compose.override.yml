@@ -1,0 +1,37 @@
+# Development overrides
+version: '3.8'
+
+services:
+  # Development backend with hot reload
+  backend:
+    build:
+      context: ./server
+      dockerfile: Dockerfile.dev
+    environment:
+      - NODE_ENV=development
+    volumes:
+      - ./server:/app:cached
+      - /app/node_modules
+      - ./card-images:/app/card-images:ro
+    command: ["npm", "run", "dev"]
+
+  # Development frontend with hot reload
+  frontend:
+    build:
+      context: ./client
+      dockerfile: Dockerfile.dev
+    ports:
+      - "5173:5173"
+      - "8000:5173"  # Also expose on port 8000 for consistency
+    volumes:
+      - ./client:/app:cached
+      - /app/node_modules
+    environment:
+      - VITE_API_URL=http://localhost:3000
+
+  # MongoDB with development settings
+  mongodb:
+    ports:
+      - "27017:27017"
+    volumes:
+      - ./data/mongodb:/data/db

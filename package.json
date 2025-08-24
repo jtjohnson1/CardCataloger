@@ -1,0 +1,45 @@
+{
+  "name": "cardcataloger",
+  "version": "1.0.0",
+  "description": "A web-based application for managing and cataloging scanned sports and non-sports card collections",
+  "main": "index.js",
+  "scripts": {
+    "start": "concurrently \"npm run server\" \"npm run client\"",
+    "server": "cd server && npm run dev",
+    "client": "cd client && npm run dev",
+    "build": "cd client && npm run build",
+    "docker:build": "docker-compose build",
+    "docker:up": "docker-compose up -d",
+    "docker:down": "docker-compose down",
+    "docker:logs": "docker-compose logs",
+    "docker:start": "./scripts/start.sh",
+    "docker:stop": "./scripts/stop.sh",
+    "setup": "./scripts/start.sh"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/your-username/CardCataloger.git"
+  },
+  "keywords": [
+    "card",
+    "collection",
+    "management",
+    "ai",
+    "image-recognition",
+    "trading-cards",
+    "sports-cards",
+    "cataloging",
+    "docker",
+    "react",
+    "nodejs"
+  ],
+  "author": "CardCataloger Team",
+  "license": "MIT",
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=8.0.0"
+  }
+}

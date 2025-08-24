@@ -1,0 +1,148 @@
+version: '3.8'
+
+services:
+  # MongoDB Database
+  mongodb:
+    image: mongo:7.0
+    container_name: cardcataloger-mongodb
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USERNAME:-admin}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD:-password}
+      MONGO_INITDB_DATABASE: ${MONGO_DB_NAME:-CardCataloger}
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+      - mongodb_config:/data/configdb
+    networks:
+      - cardcataloger-network
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/test --quiet
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Ollama AI Service with GPU support
+  ollama:
+    image: ollama/ollama:latest
+    container_name: cardcataloger-ollama
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+      - ./scripts:/scripts:ro
+    networks:
+      - cardcataloger-network
+    environment:
+      - OLLAMA_HOST=0.0.0.0
+      - OLLAMA_ORIGINS=*
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    runtime: nvidia
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # Backend API Service
+  backend:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    container_name: cardcataloger-backend
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - DATABASE_URL=mongodb://admin:password@mongodb:27017/CardCataloger?authSource=admin
+      - JWT_SECRET=${JWT_SECRET:-your-super-secret-jwt-key-change-this-in-production}
+      - REFRESH_TOKEN_SECRET=${REFRESH_TOKEN_SECRET:-your-super-secret-refresh-key-change-this-in-production}
+      - EBAY_APP_ID=${EBAY_APP_ID:-}
+      - EBAY_CERT_ID=${EBAY_CERT_ID:-}
+      - EBAY_DEV_ID=${EBAY_DEV_ID:-}
+      - EBAY_USER_TOKEN=${EBAY_USER_TOKEN:-}
+      - EBAY_SANDBOX=${EBAY_SANDBOX:-true}
+      - OLLAMA_BASE_URL=http://ollama:11434
+      - DOCKER_CONTAINER=true
+    volumes:
+      - ./card-images:/app/card-images:ro
+      - backend_logs:/app/logs
+    networks:
+      - cardcataloger-network
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      ollama:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/api/system/status', (res) => { process.exit(res.statusCode === 200 ? 0 : 1) })"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Frontend Web Application
+  frontend:
+    build:
+      context: ./client
+      dockerfile: Dockerfile
+    container_name: cardcataloger-frontend
+    restart: unless-stopped
+    ports:
+      - "8000:80"
+    networks:
+      - cardcataloger-network
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:80"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  # Ollama Model Setup Service (runs once to install models)
+  ollama-setup:
+    image: ollama/ollama:latest
+    container_name: cardcataloger-ollama-setup
+    volumes:
+      - ollama_data:/root/.ollama
+      - ./scripts:/scripts:ro
+    networks:
+      - cardcataloger-network
+    depends_on:
+      ollama:
+        condition: service_healthy
+    environment:
+      - OLLAMA_HOST=http://ollama:11434
+    command: /scripts/setup-ollama.sh
+    restart: "no"
+
+volumes:
+  mongodb_data:
+    driver: local
+  mongodb_config:
+    driver: local
+  ollama_data:
+    driver: local
+  backend_logs:
+    driver: local
+
+networks:
+  cardcataloger-network:
+    driver: bridge
