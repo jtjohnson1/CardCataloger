@@ -1,102 +1,50 @@
 const express = require('express');
 const router = express.Router();
-const cardService = require('../services/cardService');
-const priceService = require('../services/priceService');
+const CardService = require('../services/cardService');
+const PriceService = require('../services/priceService');
 const path = require('path');
+const fs = require('fs');
 
-// Store scanned results temporarily (in production, use Redis or database)
-const scanResults = new Map();
-
-// Create a new card manually
-router.post('/', async (req, res) => {
+// Get all cards
+router.get('/', async (req, res) => {
   try {
-    const cardData = req.body;
-    console.log('POST /api/cards - Received request body:', JSON.stringify(cardData, null, 2));
-
-    console.log('API: Creating new card manually');
-
-    const card = await cardService.createCard(cardData);
-    console.log('Card created successfully in route:', card);
-
-    res.status(201).json({
-      success: true,
-      message: 'Card created successfully',
-      card
-    });
+    console.log('GET /api/cards - Getting all cards');
+    const cards = await CardService.getAllCards();
+    console.log(`GET /api/cards - Found ${cards.length} cards`);
+    res.json({ cards });
   } catch (error) {
-    console.error('Error in create card endpoint:', error);
-    console.error('Error stack:', error.stack);
-    res.status(500).json({
-      error: error.message || 'Failed to create card'
-    });
-  }
-});
-
-// Serve images from scanned directories
-router.get('/image/*', (req, res) => {
-  try {
-    // Extract the file path from the URL
-    const filePath = req.params[0];
-    const decodedPath = decodeURIComponent(filePath);
-
-    console.log(`Serving image: ${decodedPath}`);
-
-    // Security check - ensure the path doesn't contain directory traversal
-    if (decodedPath.includes('..')) {
-      return res.status(400).json({ error: 'Invalid file path' });
-    }
-
-    // Send the file
-    res.sendFile(path.resolve(decodedPath), (err) => {
-      if (err) {
-        console.error('Error serving image:', err);
-        res.status(404).json({ error: 'Image not found' });
-      }
-    });
-  } catch (error) {
-    console.error('Error in image serving endpoint:', error);
-    res.status(500).json({ error: 'Failed to serve image' });
+    console.error('Error getting cards:', error);
+    res.status(500).json({ error: error.message });
   }
 });
 
 // Scan directory for card files
-router.post('/scan-directory', async (req, res) => {
+router.post('/scan', async (req, res) => {
   try {
+    console.log('POST /api/cards/scan - Scanning directory');
     const { directory, includeSubdirectories } = req.body;
-
+    
+    console.log(`Scanning directory: ${directory}, includeSubdirectories: ${includeSubdirectories}`);
+    
     if (!directory) {
-      return res.status(400).json({
-        error: 'Directory path is required'
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Directory path is required' 
       });
     }
 
-    console.log(`API: Scanning directory ${directory}, recursive: ${includeSubdirectories}`);
-
-    const result = await cardService.scanDirectory(directory, includeSubdirectories);
-
-    // Convert file paths to HTTP URLs
-    const cardsWithUrls = result.cards.map(card => ({
-      ...card,
-      frontImage: card.frontImage ? `/api/cards/image/${encodeURIComponent(card.frontImage)}` : card.frontImage,
-      backImage: card.backImage ? `/api/cards/image/${encodeURIComponent(card.backImage)}` : card.backImage
-    }));
-
-    // Store results for later processing
-    const scanId = Date.now().toString();
-    scanResults.set(scanId, result.cards); // Store original paths for processing
-
-    // Add scanId to response for reference
-    const response = {
-      ...result,
-      cards: cardsWithUrls,
-      scanId
-    };
-
-    res.json(response);
+    const scanResult = await CardService.scanDirectory(directory, includeSubdirectories);
+    console.log(`Scan completed - Found ${scanResult.validPairs.length} pairs, ${scanResult.singleCards.length} single cards`);
+    
+    res.json({ 
+      success: true, 
+      data: scanResult 
+    });
   } catch (error) {
-    console.error('Error in scan-directory endpoint:', error);
-    res.status(500).json({
-      error: error.message || 'Failed to scan directory'
+    console.error('Error scanning directory:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: error.message 
     });
   }
 });
@@ -104,38 +52,37 @@ router.post('/scan-directory', async (req, res) => {
 // Process selected cards
 router.post('/process', async (req, res) => {
   try {
-    const { directory, includeSubdirectories, selectedCards } = req.body;
+    console.log('POST /api/cards/process - Processing cards');
+    const { selectedCards, directory } = req.body;
+    
+    console.log(`Processing ${selectedCards.length} cards from directory: ${directory}`);
+    
+    if (!selectedCards || !Array.isArray(selectedCards) || selectedCards.length === 0) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Selected cards array is required' 
+      });
+    }
 
     if (!directory) {
-      return res.status(400).json({
-        error: 'Directory path is required'
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Directory path is required' 
       });
     }
 
-    if (!selectedCards || !Array.isArray(selectedCards) || selectedCards.length === 0) {
-      return res.status(400).json({
-        error: 'Selected cards array is required and must not be empty'
-      });
-    }
-
-    console.log(`API: Processing ${selectedCards.length} cards from directory ${directory}`);
-
-    // For this implementation, we need to re-scan to get the card data
-    // In production, you might want to store this in a more persistent way
-    const scanResult = await cardService.scanDirectory(directory, includeSubdirectories);
-
-    const result = await cardService.processCards(
-      directory,
-      includeSubdirectories,
-      selectedCards,
-      scanResult.cards
-    );
-
-    res.json(result);
+    const jobId = await CardService.processCards(selectedCards, directory);
+    console.log(`Processing job created with ID: ${jobId}`);
+    
+    res.json({ 
+      success: true, 
+      jobId 
+    });
   } catch (error) {
-    console.error('Error in process endpoint:', error);
-    res.status(500).json({
-      error: error.message || 'Failed to start card processing'
+    console.error('Error processing cards:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: error.message 
     });
   }
 });
@@ -143,125 +90,236 @@ router.post('/process', async (req, res) => {
 // Get processing progress
 router.get('/progress/:jobId', async (req, res) => {
   try {
+    console.log(`GET /api/cards/progress/${req.params.jobId} - Getting progress`);
     const { jobId } = req.params;
-
-    if (!jobId) {
-      return res.status(400).json({
-        error: 'Job ID is required'
-      });
-    }
-
-    console.log(`API: Getting progress for job ${jobId}`);
-
-    const progress = await cardService.getProcessingProgress(jobId);
-    res.json(progress);
+    
+    const progress = await CardService.getProcessingProgress(jobId);
+    console.log(`Progress for job ${jobId}: ${progress.status} - ${progress.progress}%`);
+    
+    res.json({ progress });
   } catch (error) {
-    console.error('Error in progress endpoint:', error);
-
-    if (error.message === 'Job not found') {
-      return res.status(404).json({
-        error: 'Processing job not found'
-      });
-    }
-
-    res.status(500).json({
-      error: error.message || 'Failed to get processing progress'
+    console.error('Error getting processing progress:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: error.message 
     });
   }
 });
 
-// Get all cards
-router.get('/', async (req, res) => {
-  try {
-    console.log('GET /api/cards - Getting all cards');
-    const cards = await cardService.getAllCards();
-    console.log(`GET /api/cards - Found ${cards.length} cards`);
-    res.json({ cards });
-  } catch (error) {
-    console.error('Error in get cards endpoint:', error);
-    console.error('Error stack:', error.stack);
-    res.status(500).json({
-      error: error.message || 'Failed to get cards'
-    });
-  }
-});
-
-// Get card by ID
+// Get a specific card
 router.get('/:id', async (req, res) => {
   try {
-    const { id } = req.params;
-    console.log(`GET /api/cards/${id} - Getting card by ID`);
-
-    const card = await cardService.getCardById(id);
-    console.log(`GET /api/cards/${id} - Found card:`, card.name);
+    console.log(`GET /api/cards/${req.params.id} - Getting card`);
+    const card = await CardService.getCardById(req.params.id);
+    if (!card) {
+      return res.status(404).json({ message: 'Card not found' });
+    }
+    console.log(`Found card: ${card.name}`);
     res.json({ card });
   } catch (error) {
-    console.error('Error in get card by ID endpoint:', error);
-    console.error('Error stack:', error.stack);
-
-    if (error.message === 'Card not found') {
-      return res.status(404).json({
-        error: 'Card not found'
-      });
-    }
-
-    res.status(500).json({
-      error: error.message || 'Failed to get card'
-    });
+    console.error('Error getting card:', error);
+    res.status(500).json({ error: error.message });
   }
 });
 
-// Get price comparison for a card
-router.get('/:id/price-comparison', async (req, res) => {
+// Create a new card
+router.post('/', async (req, res) => {
   try {
-    const { id } = req.params;
-    console.log(`GET /api/cards/${id}/price-comparison - Getting price comparison`);
-
-    // First get the card details
-    const card = await cardService.getCardById(id);
-    console.log(`Price comparison for card: ${card.name}`);
-
-    // Get price comparison data
-    const priceComparison = await priceService.getPriceComparison(card);
-    console.log(`Price comparison completed - Average: $${priceComparison.averagePrice}`);
-
-    res.json(priceComparison);
+    console.log('POST /api/cards - Creating new card');
+    const cardData = req.body;
+    console.log(`Creating card: ${cardData.name}`);
+    
+    const card = await CardService.createCard(cardData);
+    console.log(`Card created with ID: ${card._id}`);
+    
+    res.status(201).json({ 
+      success: true, 
+      card 
+    });
   } catch (error) {
-    console.error('Error in price comparison endpoint:', error);
-    console.error('Error stack:', error.stack);
-
-    if (error.message === 'Card not found') {
-      return res.status(404).json({
-        error: 'Card not found'
-      });
-    }
-
-    res.status(500).json({
-      error: error.message || 'Failed to get price comparison'
+    console.error('Error creating card:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: error.message 
     });
   }
 });
 
-// Delete cards
-router.delete('/', async (req, res) => {
+// Update a card
+router.put('/:id', async (req, res) => {
   try {
+    console.log(`PUT /api/cards/${req.params.id} - Updating card`);
+    const cardData = req.body;
+    
+    const card = await CardService.updateCard(req.params.id, cardData);
+    if (!card) {
+      return res.status(404).json({ 
+        success: false, 
+        message: 'Card not found' 
+      });
+    }
+    
+    console.log(`Card updated: ${card.name}`);
+    res.json({ 
+      success: true, 
+      card 
+    });
+  } catch (error) {
+    console.error('Error updating card:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: error.message 
+    });
+  }
+});
+
+// Delete a card
+router.delete('/:id', async (req, res) => {
+  try {
+    console.log(`DELETE /api/cards/${req.params.id} - Deleting card`);
+    
+    const success = await CardService.deleteCard(req.params.id);
+    if (!success) {
+      return res.status(404).json({ 
+        success: false, 
+        message: 'Card not found' 
+      });
+    }
+    
+    console.log(`Card deleted: ${req.params.id}`);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error deleting card:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: error.message 
+    });
+  }
+});
+
+// Delete multiple cards
+router.delete('/bulk', async (req, res) => {
+  try {
+    console.log('DELETE /api/cards/bulk - Deleting multiple cards');
     const { cardIds } = req.body;
-
-    if (!cardIds || !Array.isArray(cardIds) || cardIds.length === 0) {
-      return res.status(400).json({
-        error: 'Card IDs array is required and must not be empty'
+    
+    if (!cardIds || !Array.isArray(cardIds)) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Card IDs array is required' 
       });
     }
-
-    console.log(`API: Deleting ${cardIds.length} cards`);
-
-    const result = await cardService.deleteCards(cardIds);
-    res.json(result);
-  } catch (error) {
-    console.error('Error in delete cards endpoint:', error);
-    res.status(500).json({
-      error: error.message || 'Failed to delete cards'
+    
+    console.log(`Deleting ${cardIds.length} cards`);
+    const deletedCount = await CardService.deleteMultipleCards(cardIds);
+    
+    console.log(`Deleted ${deletedCount} cards`);
+    res.json({ 
+      success: true, 
+      deletedCount 
     });
+  } catch (error) {
+    console.error('Error deleting cards:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: error.message 
+    });
+  }
+});
+
+// Delete cards by pattern
+router.delete('/wildcard', async (req, res) => {
+  try {
+    console.log('DELETE /api/cards/wildcard - Deleting cards by pattern');
+    const { pattern } = req.body;
+    
+    if (!pattern) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Pattern is required' 
+      });
+    }
+    
+    console.log(`Deleting cards matching pattern: ${pattern}`);
+    const deletedCount = await CardService.deleteCardsByPattern(pattern);
+    
+    console.log(`Deleted ${deletedCount} cards matching pattern`);
+    res.json({ 
+      success: true, 
+      deletedCount 
+    });
+  } catch (error) {
+    console.error('Error deleting cards by pattern:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: error.message 
+    });
+  }
+});
+
+// Get card pricing
+router.get('/:cardId/pricing', async (req, res) => {
+  try {
+    console.log(`GET /api/cards/${req.params.cardId}/pricing - Getting pricing`);
+    
+    const pricing = await PriceService.getCardPricing(req.params.cardId);
+    console.log(`Pricing data retrieved for card ${req.params.cardId}`);
+    
+    res.json({ pricing });
+  } catch (error) {
+    console.error('Error getting card pricing:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: error.message 
+    });
+  }
+});
+
+// Refresh card pricing
+router.post('/:cardId/pricing/refresh', async (req, res) => {
+  try {
+    console.log(`POST /api/cards/${req.params.cardId}/pricing/refresh - Refreshing pricing`);
+    
+    const pricing = await PriceService.refreshCardPricing(req.params.cardId);
+    console.log(`Pricing data refreshed for card ${req.params.cardId}`);
+    
+    res.json({ 
+      success: true, 
+      pricing 
+    });
+  } catch (error) {
+    console.error('Error refreshing card pricing:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: error.message 
+    });
+  }
+});
+
+// Serve card images
+router.get('/image/:imagePath', (req, res) => {
+  try {
+    const imagePath = decodeURIComponent(req.params.imagePath);
+    console.log(`GET /api/cards/image/${imagePath} - Serving image`);
+    
+    // Security check - ensure path doesn't contain directory traversal
+    if (imagePath.includes('..') || imagePath.includes('/') || imagePath.includes('\\')) {
+      return res.status(400).json({ message: 'Invalid image path' });
+    }
+    
+    const fullPath = path.join(process.cwd(), 'card_images', imagePath);
+    
+    // Check if file exists
+    if (!fs.existsSync(fullPath)) {
+      console.log(`Image not found: ${fullPath}`);
+      return res.status(404).json({ message: 'Image not found' });
+    }
+    
+    console.log(`Serving image: ${fullPath}`);
+    res.sendFile(fullPath);
+  } catch (error) {
+    console.error('Error serving image:', error);
+    res.status(500).json({ message: 'Error serving image' });
   }
 });
 
