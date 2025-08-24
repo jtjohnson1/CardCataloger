@@ -1,38 +1,41 @@
-import api from './api'
+import api from './api';
 
-// Description: Get system status including database and Ollama connection
+export interface SystemStatus {
+  overall: 'healthy' | 'warning' | 'error';
+  database: boolean;
+  ollama: boolean;
+  details: {
+    database: {
+      healthy: boolean;
+      latency: number | null;
+      error: string | null;
+    };
+    ollama: {
+      healthy: boolean;
+      latency: number | null;
+      error: string | null;
+      models?: number;
+      warning?: string;
+    };
+    environment: {
+      nodeEnv: string;
+      dockerized: boolean;
+      ollamaUrl: string;
+    };
+  };
+  timestamp: string;
+}
+
+// Description: Get system status including database and Ollama health
 // Endpoint: GET /api/system/status
 // Request: {}
-// Response: { overall: string, database: boolean, ollama: boolean, details?: object, timestamp?: string }
-export const getSystemStatus = async () => {
-  // Mocking the response
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      resolve({
-        overall: 'healthy',
-        database: true,
-        ollama: true,
-        details: {
-          database: {
-            healthy: true,
-            latency: 15,
-            error: null
-          },
-          ollama: {
-            healthy: true,
-            latency: 250,
-            error: null
-          }
-        },
-        timestamp: new Date().toISOString()
-      });
-    }, 500);
-  });
-  // Uncomment the below lines to make an actual API call
-  // try {
-  //   const response = await api.get('/api/system/status')
-  //   return response.data
-  // } catch (error) {
-  //   throw new Error(error?.response?.data?.message || error.message)
-  // }
-}
+// Response: SystemStatus
+export const getSystemStatus = async (): Promise<SystemStatus> => {
+  try {
+    const response = await api.get('/api/system/status');
+    return response.data;
+  } catch (error: any) {
+    console.error(error);
+    throw new Error(error?.response?.data?.message || error.message);
+  }
+};

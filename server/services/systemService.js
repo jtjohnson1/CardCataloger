@@ -3,6 +3,7 @@ const axios = require('axios');
 
 class SystemService {
   constructor() {
+    // Use Docker service name when in Docker environment, localhost otherwise
     this.ollamaBaseUrl = process.env.OLLAMA_BASE_URL || 'http://localhost:11434';
     console.log(`SystemService initialized with Ollama URL: ${this.ollamaBaseUrl}`);
   }
@@ -74,7 +75,7 @@ class SystemService {
       // Provide more specific error messages for Docker environment
       let errorMessage = error.message;
       if (error.code === 'ECONNREFUSED') {
-        errorMessage = 'Ollama service is not running or not accessible';
+        errorMessage = `Ollama service is not running or not accessible at ${this.ollamaBaseUrl}`;
       } else if (error.code === 'ETIMEDOUT') {
         errorMessage = 'Ollama service timeout - may be starting up or overloaded';
       }

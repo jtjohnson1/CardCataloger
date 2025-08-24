@@ -1,100 +1,119 @@
 #!/bin/bash
 
-# Start script for CardCataloger application
-set -e
+# CardCataloger Startup Script
+# This script sets up and starts the CardCataloger application using Docker
 
-echo "🚀 Starting CardCataloger application..."
+set -e  # Exit on any error
+
+echo "🚀 Starting CardCataloger Application..."
 
 # Check if Docker is running
-if ! docker info > /dev/null 2>&1; then
-    echo "❌ Docker is not running. Please start Docker first."
+if ! docker info >/dev/null 2>&1; then
+    echo "❌ Error: Docker is not running. Please start Docker and try again."
     exit 1
 fi
 
 # Check if docker-compose is available
-if ! command -v docker-compose > /dev/null 2>&1; then
-    echo "❌ docker-compose is not installed. Please install docker-compose first."
+if ! command -v docker-compose >/dev/null 2>&1; then
+    echo "❌ Error: docker-compose is not installed. Please install docker-compose and try again."
     exit 1
 fi
 
-# Check for Nvidia Docker support if GPU is available
-if command -v nvidia-smi > /dev/null 2>&1; then
-    echo "🎮 GPU detected, checking Nvidia Docker support..."
-    if ! docker run --rm --gpus all nvidia/cuda:11.0-base nvidia-smi > /dev/null 2>&1; then
-        echo "⚠️  Nvidia Docker support not available. Ollama will run on CPU only."
-        echo "   To enable GPU support, install nvidia-docker2 package."
-    else
-        echo "✅ Nvidia Docker support available!"
-    fi
+# Check for NVIDIA GPU support if available
+if command -v nvidia-smi >/dev/null 2>&1; then
+    echo "🎮 NVIDIA GPU detected, enabling GPU support for Ollama..."
+    export COMPOSE_DOCKER_CLI_BUILD=1
+    export DOCKER_BUILDKIT=1
 else
-    echo "ℹ️  No GPU detected, Ollama will run on CPU."
+    echo "⚠️  No NVIDIA GPU detected, running Ollama in CPU mode..."
 fi
 
 # Create necessary directories
 echo "📁 Creating necessary directories..."
-mkdir -p ./data/mongodb
 mkdir -p ./card-images
 mkdir -p ./logs
 
-# Load environment variables
+# Load environment variables from .env.docker
 if [ -f .env.docker ]; then
-    echo "📋 Loading environment variables from .env.docker..."
-    export $(cat .env.docker | grep -v '^#' | xargs)
+    echo "🔧 Loading Docker environment variables..."
+    export $(grep -v '^#' .env.docker | xargs)
 else
-    echo "⚠️  .env.docker file not found, using default values..."
+    echo "⚠️  Warning: .env.docker file not found, using default values..."
 fi
 
 # Stop any existing containers
 echo "🛑 Stopping any existing containers..."
 docker-compose down --remove-orphans || true
 
+# Pull latest images
+echo "📥 Pulling latest Docker images..."
+docker-compose pull
+
 # Build and start services
-echo "🔨 Building and starting services..."
+echo "🏗️  Building and starting services..."
 docker-compose up -d --build
 
 # Wait for services to be healthy
-echo "⏳ Waiting for services to be healthy..."
+echo "⏳ Waiting for services to start..."
 sleep 10
 
-# Check service status
-echo "🔍 Checking service status..."
-docker-compose ps
-
-# Wait for backend to be ready
-echo "⏳ Waiting for backend API to be ready..."
-max_attempts=30
-attempt=0
-
-while [ $attempt -lt $max_attempts ]; do
-    if curl -s http://localhost:3000/api/system/status > /dev/null 2>&1; then
-        echo "✅ Backend API is ready!"
+# Check service health
+echo "🔍 Checking service health..."
+for i in {1..30}; do
+    if docker-compose ps | grep -q "healthy"; then
+        echo "✅ Services are starting up..."
         break
     fi
-    
-    attempt=$((attempt + 1))
-    echo "🔄 Attempt $attempt/$max_attempts - Backend not ready yet, waiting 10 seconds..."
-    sleep 10
+    echo "   Waiting for services... ($i/30)"
+    sleep 2
 done
 
-if [ $attempt -eq $max_attempts ]; then
-    echo "❌ Backend API failed to start properly"
-    echo "📋 Checking logs..."
-    docker-compose logs backend
+# Wait for Ollama to be ready before setting up models
+echo "🤖 Waiting for Ollama service to be ready..."
+for i in {1..60}; do
+    if curl -s http://localhost:11434/api/tags >/dev/null 2>&1; then
+        echo "✅ Ollama is ready!"
+        break
+    fi
+    echo "   Waiting for Ollama... ($i/60)"
+    sleep 2
+done
+
+# Setup Ollama models
+echo "📚 Setting up Ollama models..."
+if [ -f ./scripts/setup-ollama.sh ]; then
+    chmod +x ./scripts/setup-ollama.sh
+    docker-compose run --rm ollama-setup
+else
+    echo "⚠️  Warning: setup-ollama.sh script not found, skipping model setup..."
+fi
+
+# Final health check
+echo "🏥 Performing final health check..."
+sleep 5
+
+# Check if all services are running
+if docker-compose ps | grep -q "Exit"; then
+    echo "❌ Some services failed to start. Checking logs..."
+    docker-compose logs --tail=50
     exit 1
 fi
 
-# Check if Ollama models are being set up
-echo "🤖 Checking Ollama model setup..."
-docker-compose logs ollama-setup
-
 echo ""
-echo "🎉 CardCataloger application started successfully!"
+echo "🎉 CardCataloger is now running!"
 echo ""
-echo "📱 Web Application: http://localhost:8000"
-echo "🔧 API Endpoint: http://localhost:3000"
-echo "🤖 Ollama Service: http://localhost:11434"
-echo "🗄️  MongoDB: localhost:27017"
+echo "📱 Access the application:"
+echo "   Web Interface: http://localhost:8000"
+echo "   API Status:    http://localhost:3000/api/system/status"
+echo "   Ollama API:    http://localhost:11434/api/tags"
 echo ""
-echo "💡 Use './scripts/stop.sh' to stop all services"
-echo "📊 Use 'docker-compose logs [service-name]' to view logs"
+echo "📊 Monitor services:"
+echo "   docker-compose logs -f          # View all logs"
+echo "   docker-compose ps               # Check service status"
+echo "   ./scripts/stop.sh              # Stop all services"
+echo ""
+echo "🔧 Troubleshooting:"
+echo "   If services fail to start, check the logs above"
+echo "   Ensure you have enough disk space and memory"
+echo "   For GPU issues, verify NVIDIA Docker runtime is installed"
 echo ""

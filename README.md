@@ -29,7 +29,7 @@ Before you begin, ensure you have the following installed on your system:
    chmod +x scripts/*.sh
    ```
 
-3. **Start the application:**
+3. **Start the application (Production Mode):**
    ```bash
    ./scripts/start.sh
    ```
@@ -38,6 +38,19 @@ Before you begin, ensure you have the following installed on your system:
    - **Web Interface**: http://localhost:8000
    - **API**: http://localhost:3000/api/system/status
    - **Ollama AI Service**: http://localhost:11434/api/tags
+
+### Development Mode
+
+For development with hot-reloading:
+
+```bash
+./scripts/start.sh dev
+```
+
+This will start:
+- Frontend on http://localhost:5173 (Vite dev server)
+- Backend on http://localhost:3000 (Nodemon with hot-reload)
+- Alternative frontend access on http://localhost:8000
 
 ### First Time Setup
 
@@ -114,6 +127,19 @@ volumes:
 
 ### Common Issues
 
+**Services not starting in Docker:**
+```bash
+# Make sure you're using the Docker setup, not npm start
+./scripts/start.sh
+
+# Check which containers are running
+docker-compose ps
+
+# If only MongoDB and Ollama are running, the backend/frontend didn't start
+docker-compose logs backend
+docker-compose logs frontend
+```
+
 **Port already in use:**
 ```bash
 # Check what's using the ports
@@ -136,10 +162,13 @@ docker-compose logs
 docker run --rm --gpus all nvidia/cuda:11.0-base nvidia-smi
 ```
 
-**Out of disk space:**
+**Running in wrong mode:**
 ```bash
-# Clean up Docker
-docker system prune -a
+# For production (recommended)
+./scripts/start.sh
+
+# For development
+./scripts/start.sh dev
 ```
 
 ### Getting Help
@@ -167,6 +196,13 @@ To completely reset and remove all data:
 ```bash
 docker-compose down -v
 ```
+
+## ⚠️ Important Notes
+
+- **Don't use `npm start`** - This runs development servers directly, not in Docker
+- **Use `./scripts/start.sh`** for production Docker setup
+- **Use `./scripts/start.sh dev`** for development with hot-reloading
+- **Check `docker-compose ps`** to verify all services are running in containers
 
 ## 📊 Features
 
@@ -221,8 +257,9 @@ If you encounter issues:
 
 1. Check this README and the troubleshooting section
 2. Review the [Docker setup guide](README.Docker.md)
-3. Check existing GitHub issues
-4. Create a new issue with:
+3. Verify you're using `./scripts/start.sh` not `npm start`
+4. Check existing GitHub issues
+5. Create a new issue with:
    - Your operating system
    - Docker version
    - Complete error logs

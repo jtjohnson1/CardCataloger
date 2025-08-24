@@ -1,21 +1,26 @@
 # Development overrides
 version: '3.8'
 
+# Development overrides - only used when explicitly specified
+# This file is automatically loaded by docker-compose
+# To use production mode, run: docker-compose -f docker-compose.yml up -d
+
 services:
-  # Development backend with hot reload
+  # Development overrides for backend
   backend:
     build:
       context: ./server
       dockerfile: Dockerfile.dev
     environment:
       - NODE_ENV=development
+      - OLLAMA_BASE_URL=http://ollama:11434
     volumes:
       - ./server:/app:cached
       - /app/node_modules
       - ./card-images:/app/card-images:ro
     command: ["npm", "run", "dev"]
 
-  # Development frontend with hot reload
+  # Development overrides for frontend  
   frontend:
     build:
       context: ./client
@@ -29,9 +34,7 @@ services:
     environment:
       - VITE_API_URL=http://localhost:3000
 
-  # MongoDB with development settings
+  # Development database with local volume
   mongodb:
-    ports:
-      - "27017:27017"
     volumes:
       - ./data/mongodb:/data/db
