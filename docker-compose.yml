@@ -7,36 +7,31 @@ services:
     container_name: cardcataloger-mongodb
     restart: unless-stopped
     environment:
-      MONGO_INITDB_ROOT_USERNAME: admin
-      MONGO_INITDB_ROOT_PASSWORD: cardcataloger123
       MONGO_INITDB_DATABASE: CardCataloger
-    ports:
-      - "27017:27017"
     volumes:
       - mongodb_data:/data/db
-    networks:
-      - cardcataloger-network
     healthcheck:
-      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/CardCataloger --quiet
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
 
   # Ollama AI Service
   ollama:
     image: ollama/ollama:latest
     container_name: cardcataloger-ollama
     restart: unless-stopped
-    ports:
-      - "11434:11434"
     volumes:
       - ollama_data:/root/.ollama
-    networks:
-      - cardcataloger-network
     environment:
       - OLLAMA_HOST=0.0.0.0:11434
-      - OLLAMA_DEBUG=INFO
-      - OLLAMA_CONTEXT_LENGTH=4096
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
     deploy:
       resources:
         reservations:
@@ -44,26 +39,6 @@ services:
             - driver: nvidia
               count: all
               capabilities: [gpu]
-    healthcheck:
-      test: ["CMD-SHELL", "ollama list || exit 1"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 30s
-
-  # Ollama Model Setup
-  ollama-setup:
-    image: curlimages/curl:latest
-    container_name: cardcataloger-ollama-setup
-    depends_on:
-      ollama:
-        condition: service_healthy
-    networks:
-      - cardcataloger-network
-    volumes:
-      - ./scripts:/scripts:ro
-    command: ["/bin/sh", "/scripts/setup-ollama.sh"]
-    restart: "no"
 
   # Backend API
   backend:
@@ -76,32 +51,25 @@ services:
       - "3000:3000"
     environment:
       - NODE_ENV=production
-      - PORT=3000
-      - DATABASE_URL=mongodb://admin:cardcataloger123@mongodb:27017/CardCataloger?authSource=admin
-      - OLLAMA_BASE_URL=http://ollama:11434
-      - JWT_SECRET=your-super-secret-jwt-key-change-this-in-production
-      - REFRESH_TOKEN_SECRET=your-super-secret-refresh-token-key-change-this-too
-      - EBAY_APP_ID=${EBAY_APP_ID:-}
-      - EBAY_CERT_ID=${EBAY_CERT_ID:-}
-      - EBAY_DEV_ID=${EBAY_DEV_ID:-}
-      - EBAY_USER_TOKEN=${EBAY_USER_TOKEN:-}
-      - EBAY_SANDBOX=true
       - DOCKER_CONTAINER=true
+      - DATABASE_URL=mongodb://mongodb:27017/CardCataloger
+      - OLLAMA_BASE_URL=http://ollama:11434
+    env_file:
+      - .env.docker
+    volumes:
+      - ./card_images:/app/card_images:ro
+      - ./test_data:/app/test_data:ro
     depends_on:
       mongodb:
         condition: service_healthy
       ollama:
         condition: service_healthy
-    networks:
-      - cardcataloger-network
-    volumes:
-      - ./card_images:/app/card_images:ro
     healthcheck:
-      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/api/system/status', (res) => { process.exit(res.statusCode === 200 ? 0 : 1) })"]
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/system/status"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 10s
+      start_period: 40s
 
   # Frontend Web Application
   frontend:
@@ -115,8 +83,6 @@ services:
     depends_on:
       backend:
         condition: service_healthy
-    networks:
-      - cardcataloger-network
 
 volumes:
   mongodb_data:

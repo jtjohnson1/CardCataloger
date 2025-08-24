@@ -11,47 +11,34 @@ const processingJobSchema = new mongoose.Schema({
     enum: ['pending', 'processing', 'completed', 'failed'],
     default: 'pending'
   },
+  totalCards: {
+    type: Number,
+    required: true
+  },
+  cardsCompleted: {
+    type: Number,
+    default: 0
+  },
+  progress: {
+    type: Number,
+    default: 0,
+    min: 0,
+    max: 100
+  },
+  selectedCards: [{
+    type: String,  // Array of strings, not embedded documents
+    required: true
+  }],
   directory: {
     type: String,
     required: true
   },
-  includeSubdirectories: {
-    type: Boolean,
-    default: false
-  },
-  selectedCards: [{
-    frontImage: String,
-    backImage: String,
-    lotNumber: String,
-    iteration: String
-  }],
-  progress: {
-    completed: {
-      type: Number,
-      default: 0
-    },
-    total: {
-      type: Number,
-      default: 0
-    },
-    speed: {
-      type: Number,
-      default: 0
-    },
-    estimatedTimeRemaining: {
-      type: Number,
-      default: 0
-    },
-    errors: [{
-      type: String
-    }]
-  },
   currentCard: {
-    frontImage: String,
-    backImage: String,
-    lotNumber: String,
-    iteration: String
+    type: String
   },
+  errors: [{
+    type: String
+  }],
   startTime: {
     type: Date,
     default: Date.now

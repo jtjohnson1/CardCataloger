@@ -56,10 +56,39 @@ export interface ProcessingProgress {
 // Response: { success: boolean, data: ScanResult }
 export const scanDirectory = async (data: { directory: string; includeSubdirectories: boolean }) => {
   try {
+    console.log('scanDirectory API call - Request:', data);
     const response = await api.post('/api/cards/scan', data);
+    console.log('scanDirectory API call - Response:', response.data);
+    
+    // Ensure the response has the expected structure
+    if (!response.data) {
+      throw new Error('No data received from server');
+    }
+    
+    if (!response.data.success) {
+      throw new Error(response.data.message || 'Scan failed');
+    }
+    
+    if (!response.data.data) {
+      throw new Error('No scan data received from server');
+    }
+    
+    // Validate the scan result structure
+    const scanResult = response.data.data;
+    if (!scanResult.validPairs) {
+      scanResult.validPairs = [];
+    }
+    if (!scanResult.singleCards) {
+      scanResult.singleCards = [];
+    }
+    if (typeof scanResult.totalImages !== 'number') {
+      scanResult.totalImages = (scanResult.validPairs?.length || 0) + (scanResult.singleCards?.length || 0);
+    }
+    
+    console.log('scanDirectory API call - Processed result:', scanResult);
     return response.data;
   } catch (error: any) {
-    console.error(error);
+    console.error('scanDirectory API call - Error:', error);
     throw new Error(error?.response?.data?.message || error.message);
   }
 };

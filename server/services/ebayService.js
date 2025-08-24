@@ -8,169 +8,94 @@ class EbayService {
     this.userToken = process.env.EBAY_USER_TOKEN;
     this.sandbox = process.env.EBAY_SANDBOX === 'true';
     
-    // eBay Finding API endpoint
     this.baseUrl = this.sandbox 
-      ? 'https://svcs.sandbox.ebay.com/services/search/FindingService/v1'
-      : 'https://svcs.ebay.com/services/search/FindingService/v1';
+      ? 'https://api.sandbox.ebay.com'
+      : 'https://api.ebay.com';
+    
+    console.log('EbayService initialized');
   }
 
-  async searchCompletedListings(card) {
+  async searchCompletedListings(query, options = {}) {
     try {
-      console.log(`eBay Service: Searching completed listings for card: ${card.name}`);
+      console.log(`EbayService.searchCompletedListings called for: ${query}`);
       
-      // Build search query from card details
-      const searchQuery = this.buildSearchQuery(card);
-      console.log(`eBay Service: Search query: ${searchQuery}`);
+      // Mock implementation for now
+      const mockResults = [
+        {
+          title: `${query} - Card`,
+          price: Math.random() * 100 + 10,
+          condition: 'Near Mint',
+          endDate: new Date(Date.now() - Math.random() * 30 * 24 * 60 * 60 * 1000).toISOString(),
+          shipping: 3.99
+        },
+        {
+          title: `${query} Trading Card`,
+          price: Math.random() * 80 + 15,
+          condition: 'Excellent',
+          endDate: new Date(Date.now() - Math.random() * 60 * 24 * 60 * 60 * 1000).toISOString(),
+          shipping: 4.50
+        }
+      ];
 
-      const params = {
-        'OPERATION-NAME': 'findCompletedItems',
-        'SERVICE-VERSION': '1.0.0',
-        'SECURITY-APPNAME': this.appId,
-        'RESPONSE-DATA-FORMAT': 'JSON',
-        'REST-PAYLOAD': true,
-        'keywords': searchQuery,
-        'categoryId': '213', // Sports Trading Cards category
-        'itemFilter(0).name': 'SoldItemsOnly',
-        'itemFilter(0).value': 'true',
-        'itemFilter(1).name': 'Condition',
-        'itemFilter(1).value': ['New', 'Used'],
-        'sortOrder': 'EndTimeSoonest',
-        'paginationInput.entriesPerPage': '50',
-        'paginationInput.pageNumber': '1'
-      };
-
-      const response = await axios.get(this.baseUrl, { params });
-      
-      if (response.data?.findCompletedItemsResponse?.[0]?.searchResult?.[0]?.item) {
-        const items = response.data.findCompletedItemsResponse[0].searchResult[0].item;
-        console.log(`eBay Service: Found ${items.length} completed listings`);
-        return this.parseCompletedItems(items);
-      }
-
-      console.log('eBay Service: No completed listings found');
-      return [];
+      console.log(`EbayService.searchCompletedListings - Found ${mockResults.length} results`);
+      return mockResults;
     } catch (error) {
-      console.error('eBay Service: Error searching completed listings:', error.message);
-      throw new Error(`Failed to search eBay completed listings: ${error.message}`);
+      console.error('Error in EbayService.searchCompletedListings:', error);
+      throw error;
     }
   }
 
-  async searchActiveListings(card) {
+  async searchActiveListings(query, options = {}) {
     try {
-      console.log(`eBay Service: Searching active listings for card: ${card.name}`);
+      console.log(`EbayService.searchActiveListings called for: ${query}`);
       
-      const searchQuery = this.buildSearchQuery(card);
+      // Mock implementation for now
+      const mockResults = [
+        {
+          title: `${query} PSA Graded`,
+          price: Math.random() * 120 + 20,
+          condition: 'Mint',
+          listingDate: new Date().toISOString(),
+          shipping: 5.99
+        }
+      ];
 
-      const params = {
-        'OPERATION-NAME': 'findItemsByKeywords',
-        'SERVICE-VERSION': '1.0.0',
-        'SECURITY-APPNAME': this.appId,
-        'RESPONSE-DATA-FORMAT': 'JSON',
-        'REST-PAYLOAD': true,
-        'keywords': searchQuery,
-        'categoryId': '213', // Sports Trading Cards category
-        'itemFilter(0).name': 'Condition',
-        'itemFilter(0).value': ['New', 'Used'],
-        'itemFilter(1).name': 'ListingType',
-        'itemFilter(1).value': ['FixedPrice', 'Auction'],
-        'sortOrder': 'PricePlusShippingLowest',
-        'paginationInput.entriesPerPage': '50',
-        'paginationInput.pageNumber': '1'
-      };
-
-      const response = await axios.get(this.baseUrl, { params });
-      
-      if (response.data?.findItemsByKeywordsResponse?.[0]?.searchResult?.[0]?.item) {
-        const items = response.data.findItemsByKeywordsResponse[0].searchResult[0].item;
-        console.log(`eBay Service: Found ${items.length} active listings`);
-        return this.parseActiveItems(items);
-      }
-
-      console.log('eBay Service: No active listings found');
-      return [];
+      console.log(`EbayService.searchActiveListings - Found ${mockResults.length} results`);
+      return mockResults;
     } catch (error) {
-      console.error('eBay Service: Error searching active listings:', error.message);
-      throw new Error(`Failed to search eBay active listings: ${error.message}`);
+      console.error('Error in EbayService.searchActiveListings:', error);
+      throw error;
     }
   }
 
-  buildSearchQuery(card) {
-    // Build a search query from card details
-    const parts = [];
-    
-    if (card.name && card.name !== 'Unknown') {
-      parts.push(card.name);
-    }
-    
-    if (card.player && card.player !== 'Unknown') {
-      parts.push(card.player);
-    }
-    
-    if (card.year && card.year !== 'Unknown') {
-      parts.push(card.year);
-    }
-    
-    if (card.manufacturer && card.manufacturer !== 'Unknown') {
-      parts.push(card.manufacturer);
-    }
-    
-    if (card.set && card.set !== 'Unknown') {
-      parts.push(card.set);
-    }
-
-    if (card.cardNumber && card.cardNumber !== 'Unknown') {
-      parts.push(`#${card.cardNumber}`);
-    }
-
-    // If we don't have enough details, use a generic search
-    if (parts.length === 0) {
-      return 'trading card';
-    }
-
-    return parts.join(' ');
-  }
-
-  parseCompletedItems(items) {
-    return items.map(item => {
-      const price = parseFloat(item.sellingStatus?.[0]?.currentPrice?.[0]?.__value__ || 0);
-      const condition = item.condition?.[0]?.conditionDisplayName?.[0] || 'Unknown';
-      const title = item.title?.[0] || 'Unknown Title';
-      const endTime = item.listingInfo?.[0]?.endTime?.[0] || new Date().toISOString();
-      const url = item.viewItemURL?.[0] || '';
-
-      return {
-        title,
-        price,
-        condition,
-        date: endTime,
-        url,
-        source: 'eBay'
+  async makeRequest(endpoint, params = {}) {
+    try {
+      console.log(`EbayService.makeRequest called for endpoint: ${endpoint}`);
+      
+      const config = {
+        method: 'GET',
+        url: `${this.baseUrl}${endpoint}`,
+        params,
+        headers: {
+          'X-EBAY-API-APP-ID': this.appId,
+          'X-EBAY-API-CERT-ID': this.certId,
+          'X-EBAY-API-DEV-ID': this.devId,
+          'X-EBAY-API-CALL-NAME': 'FindCompletedItems',
+          'X-EBAY-API-VERSION': '1.13.0',
+          'X-EBAY-API-REQUEST-ENCODING': 'JSON',
+          'X-EBAY-API-RESPONSE-ENCODING': 'JSON'
+        },
+        timeout: 10000
       };
-    }).filter(item => item.price > 0); // Filter out items with no price
-  }
 
-  parseActiveItems(items) {
-    return items.map(item => {
-      const price = parseFloat(item.sellingStatus?.[0]?.currentPrice?.[0]?.__value__ || 0);
-      const condition = item.condition?.[0]?.conditionDisplayName?.[0] || 'Unknown';
-      const title = item.title?.[0] || 'Unknown Title';
-      const startTime = item.listingInfo?.[0]?.startTime?.[0] || new Date().toISOString();
-      const url = item.viewItemURL?.[0] || '';
-
-      return {
-        title,
-        price,
-        condition,
-        date: startTime,
-        url,
-        source: 'eBay'
-      };
-    }).filter(item => item.price > 0); // Filter out items with no price
-  }
-
-  isConfigured() {
-    return !!(this.appId && this.certId && this.devId);
+      const response = await axios(config);
+      console.log(`EbayService.makeRequest - Request successful for: ${endpoint}`);
+      return response.data;
+    } catch (error) {
+      console.error('Error in EbayService.makeRequest:', error);
+      throw error;
+    }
   }
 }
 
-module.exports = new EbayService();
+module.exports = EbayService;
