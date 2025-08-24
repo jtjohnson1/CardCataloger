@@ -1,44 +1,63 @@
 #!/bin/bash
 
-echo "Starting CardCataloger application..."
+# CardCataloger Application Startup Script
+echo "Starting CardCataloger Application..."
+
+# Check if Docker and Docker Compose are available
+if ! command -v docker &> /dev/null; then
+    echo "ERROR: Docker is not installed or not in PATH"
+    exit 1
+fi
+
+if ! command -v docker compose &> /dev/null; then
+    echo "ERROR: Docker Compose is not installed or not in PATH"
+    exit 1
+fi
+
+# Create necessary directories
+echo "Creating necessary directories..."
+mkdir -p test_data
+mkdir -p card_images
 
 # Create test data if it doesn't exist
-if [ ! -d "test_data" ] || [ -z "$(ls -A test_data)" ]; then
-    echo "Creating test data..."
+if [ ! -f "test_data/sample-001-front.jpg" ]; then
+    echo "Creating sample test data..."
     ./scripts/create-test-data.sh
 fi
 
-# Make sure the script is executable
-chmod +x scripts/create-test-data.sh
+# Stop any existing containers
+echo "Stopping any existing containers..."
+docker compose down --remove-orphans
 
-# Start Docker services
-echo "Starting Docker services..."
-docker-compose up -d --build
+# Build and start services
+echo "Building and starting services..."
+docker compose up -d --build
 
-echo ""
-echo "Waiting for services to be ready..."
+# Wait for services to be healthy
+echo "Waiting for services to be healthy..."
 sleep 10
 
-# Check if Ollama needs model installation
-echo "Checking Ollama models..."
-if docker-compose exec -T ollama ollama list | grep -q "NAME"; then
-    echo "Ollama models already installed"
-else
-    echo "Installing Ollama models..."
-    docker-compose exec -T ollama ollama pull llava:latest
-    docker-compose exec -T ollama ollama pull llama2:latest
-fi
+# Check service status
+echo "Checking service status..."
+docker compose ps
+
+# Wait for Ollama to be fully ready and install models
+echo "Setting up Ollama models..."
+docker compose exec ollama /scripts/setup-ollama.sh
+
+# Final status check
+echo "Final service status:"
+docker compose ps
 
 echo ""
-echo "CardCataloger is starting up!"
+echo "CardCataloger Application Started Successfully!"
 echo ""
 echo "Services:"
-echo "  - Frontend: http://localhost:8000"
-echo "  - Backend API: http://localhost:3000"
-echo "  - System Status: http://localhost:3000/api/system/status"
-echo "  - Ollama: http://localhost:11434"
+echo "  - Frontend:  http://localhost:8000"
+echo "  - Backend:   http://localhost:3000"
+echo "  - MongoDB:   mongodb://localhost:27017"
+echo "  - Ollama:    http://localhost:11434"
 echo ""
-echo "Test directory path to use in the app: /app/test_data"
+echo "To stop the application, run: ./scripts/stop.sh"
+echo "To view logs, run: docker compose logs -f"
 echo ""
-echo "To view logs: docker-compose logs -f"
-echo "To stop: ./scripts/stop.sh"

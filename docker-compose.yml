@@ -7,40 +7,54 @@ services:
     container_name: cardcataloger-mongodb
     restart: unless-stopped
     environment:
-      MONGO_INITDB_DATABASE: CardCataloger
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USERNAME:-admin}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD:-password123}
+      MONGO_INITDB_DATABASE: ${MONGO_DB_NAME:-CardCataloger}
+    ports:
+      - "27017:27017"
     volumes:
       - mongodb_data:/data/db
+    networks:
+      - cardcataloger-network
     healthcheck:
-      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/CardCataloger --quiet
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
   # Ollama AI Service
   ollama:
     image: ollama/ollama:latest
     container_name: cardcataloger-ollama
     restart: unless-stopped
+    ports:
+      - "11434:11434"
     volumes:
       - ollama_data:/root/.ollama
+      - ./scripts:/scripts
+    networks:
+      - cardcataloger-network
     environment:
-      - OLLAMA_HOST=0.0.0.0:11434
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 60s
+      - OLLAMA_HOST=http://0.0.0.0:11434
+      - OLLAMA_ORIGINS=*
+      - OLLAMA_DEBUG=INFO
+      - OLLAMA_CONTEXT_LENGTH=4096
     deploy:
       resources:
         reservations:
           devices:
             - driver: nvidia
-              count: all
+              count: 1
               capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
 
-  # Backend API
+  # Backend API Server
   backend:
     build:
       context: ./server
@@ -51,14 +65,22 @@ services:
       - "3000:3000"
     environment:
       - NODE_ENV=production
-      - DOCKER_CONTAINER=true
-      - DATABASE_URL=mongodb://mongodb:27017/CardCataloger
+      - PORT=3000
+      - DATABASE_URL=mongodb://admin:password123@mongodb:27017/CardCataloger?authSource=admin
+      - JWT_SECRET=${JWT_SECRET:-your-super-secret-jwt-key-change-this-in-production}
+      - REFRESH_TOKEN_SECRET=${REFRESH_TOKEN_SECRET:-your-super-secret-refresh-key-change-this-too}
+      - EBAY_APP_ID=${EBAY_APP_ID:-your_ebay_app_id_here}
+      - EBAY_CERT_ID=${EBAY_CERT_ID:-your_ebay_cert_id_here}
+      - EBAY_DEV_ID=${EBAY_DEV_ID:-your_ebay_dev_id_here}
+      - EBAY_USER_TOKEN=${EBAY_USER_TOKEN:-your_ebay_user_token_here}
+      - EBAY_SANDBOX=${EBAY_SANDBOX:-true}
       - OLLAMA_BASE_URL=http://ollama:11434
-    env_file:
-      - .env.docker
+      - DOCKER_CONTAINER=true
     volumes:
-      - ./card_images:/app/card_images:ro
       - ./test_data:/app/test_data:ro
+      - card_images:/app/card_images
+    networks:
+      - cardcataloger-network
     depends_on:
       mongodb:
         condition: service_healthy
@@ -80,14 +102,24 @@ services:
     restart: unless-stopped
     ports:
       - "8000:80"
+    networks:
+      - cardcataloger-network
     depends_on:
       backend:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
 
 volumes:
   mongodb_data:
     driver: local
   ollama_data:
+    driver: local
+  card_images:
     driver: local
 
 networks:
