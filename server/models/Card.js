@@ -1,92 +1,64 @@
 const mongoose = require('mongoose');
 
 const cardSchema = new mongoose.Schema({
+  frontImage: {
+    type: String,
+    required: true
+  },
+  backImage: {
+    type: String,
+    default: null
+  },
   name: {
     type: String,
-    required: true,
-    trim: true
+    required: true
   },
   manufacturer: {
     type: String,
-    default: 'Unknown',
-    trim: true
+    default: 'Unknown'
   },
   year: {
-    type: Number,
-    min: 1800,
-    max: new Date().getFullYear() + 10
+    type: String,
+    default: 'Unknown'
   },
   player: {
     type: String,
-    default: 'Unknown Player',
-    trim: true
-  },
-  team: {
-    type: String,
-    default: 'Unknown Team',
-    trim: true
-  },
-  cardNumber: {
-    type: String,
-    trim: true
+    default: 'Unknown'
   },
   series: {
     type: String,
-    default: 'Unknown Series',
-    trim: true
+    default: 'Unknown'
   },
-  condition: {
+  cardNumber: {
     type: String,
-    enum: ['Mint', 'Near Mint', 'Excellent', 'Very Good', 'Good', 'Fair', 'Poor', 'Unknown'],
     default: 'Unknown'
   },
   estimatedValue: {
     type: Number,
-    default: 0,
-    min: 0
+    default: 0
   },
-  images: {
-    front: {
-      type: String,
-      required: true
-    },
-    back: {
-      type: String
-    }
+  sport: {
+    type: String,
+    default: 'Unknown'
   },
-  fileInfo: {
-    frontFile: {
-      type: String,
-      required: true
-    },
-    backFile: {
-      type: String
-    },
-    lotNumber: {
-      type: String,
-      required: true
-    },
-    iteration: {
-      type: String,
-      required: true
-    }
+  set: {
+    type: String,
+    default: 'Unknown'
   },
-  dateAdded: {
-    type: Date,
-    default: Date.now
+  condition: {
+    type: String,
+    default: 'Unknown'
   },
-  dateModified: {
-    type: Date,
-    default: Date.now
+  lotNumber: {
+    type: String,
+    required: true
+  },
+  iteration: {
+    type: String,
+    required: true
   }
 }, {
   timestamps: true
-});
-
-// Update dateModified on save
-cardSchema.pre('save', function(next) {
-  this.dateModified = new Date();
-  next();
 });
 
 module.exports = mongoose.model('Card', cardSchema);

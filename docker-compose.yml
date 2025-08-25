@@ -3,61 +3,62 @@ version: '3.8'
 services:
   # MongoDB Database
   mongodb:
-    image: mongo:7.0
+    image: mongo:7
     container_name: cardcataloger-mongodb
     restart: unless-stopped
+    environment:
+      MONGO_INITDB_DATABASE: CardCataloger
     ports:
       - "27017:27017"
     volumes:
       - mongodb_data:/data/db
+      - ./mongo-init.js:/docker-entrypoint-initdb.d/mongo-init.js:ro
     networks:
       - cardcataloger-network
-    healthcheck:
-      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 30s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
-  # Ollama AI Service
+  # Ollama AI Service with GPU Support
   ollama:
     image: ollama/ollama:latest
     container_name: cardcataloger-ollama
     restart: unless-stopped
-    runtime: nvidia
     ports:
       - "11434:11434"
     volumes:
       - ollama_data:/root/.ollama
-      - ./scripts:/scripts
     networks:
       - cardcataloger-network
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
     environment:
-      - OLLAMA_HOST=http://0.0.0.0:11434
-      - OLLAMA_ORIGINS=*
-      - OLLAMA_DEBUG=INFO
-      - OLLAMA_CONTEXT_LENGTH=4096
       - NVIDIA_VISIBLE_DEVICES=all
       - NVIDIA_DRIVER_CAPABILITIES=compute,utility
-      - OLLAMA_MODEL=llava:latest
-    devices:
-      - /dev/nvidia0:/dev/nvidia0
-      - /dev/nvidiactl:/dev/nvidiactl
-      - /dev/nvidia-modeset:/dev/nvidia-modeset
-      - /dev/nvidia-uvm:/dev/nvidia-uvm
-      - /dev/nvidia-uvm-tools:/dev/nvidia-uvm-tools
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     healthcheck:
-      test: ["CMD", "sh", "-c", "ollama --version && pgrep ollama"]
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
       interval: 30s
-      timeout: 15s
-      retries: 5
-      start_period: 120s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
 
-  # Backend API Server
+  # Backend API Service
   backend:
     build:
-      context: ./server
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: Dockerfile.backend
     container_name: cardcataloger-backend
     restart: unless-stopped
     ports:
@@ -66,62 +67,69 @@ services:
       - NODE_ENV=production
       - PORT=3000
       - DATABASE_URL=mongodb://mongodb:27017/CardCataloger
-      - JWT_SECRET=${JWT_SECRET:-your-super-secret-jwt-key-change-this-in-production} # INPUT_REQUIRED {JWT secret key for authentication}
-      - REFRESH_TOKEN_SECRET=${REFRESH_TOKEN_SECRET:-your-super-secret-refresh-key-change-this-too} # INPUT_REQUIRED {Refresh token secret key}
-      - EBAY_APP_ID=${EBAY_APP_ID:-your_ebay_app_id_here} # INPUT_REQUIRED {eBay API App ID}
-      - EBAY_CERT_ID=${EBAY_CERT_ID:-your_ebay_cert_id_here} # INPUT_REQUIRED {eBay API Certificate ID}
-      - EBAY_DEV_ID=${EBAY_DEV_ID:-your_ebay_dev_id_here} # INPUT_REQUIRED {eBay API Developer ID}
-      - EBAY_USER_TOKEN=${EBAY_USER_TOKEN:-your_ebay_user_token_here} # INPUT_REQUIRED {eBay API User Token}
-      - EBAY_SANDBOX=false
       - OLLAMA_BASE_URL=http://ollama:11434
-      - OLLAMA_MODEL=llava:latest
-      - DOCKER_CONTAINER=true
+      - JWT_SECRET=${JWT_SECRET:-default_jwt_secret_change_in_production}
+      - REFRESH_TOKEN_SECRET=${REFRESH_TOKEN_SECRET:-default_refresh_secret_change_in_production}
+      - EBAY_APP_ID=${EBAY_APP_ID}
+      - EBAY_CERT_ID=${EBAY_CERT_ID}
+      - EBAY_DEV_ID=${EBAY_DEV_ID}
+      - EBAY_USER_TOKEN=${EBAY_USER_TOKEN}
+      - EBAY_SANDBOX=${EBAY_SANDBOX:-true}
     volumes:
-      - ./test_data:/app/test_data:ro
-      - card_images:/app/card_images
+      - ./card-images:/app/card-images:ro
+      - ./uploads:/app/uploads
+      - backend_logs:/app/logs
     networks:
       - cardcataloger-network
     depends_on:
-      mongodb:
-        condition: service_healthy
-      ollama:
-        condition: service_healthy
+      - mongodb
+      - ollama
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     healthcheck:
-      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/api/system/status', (res) => { process.exit(res.statusCode === 200 ? 0 : 1) })"]
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/system/status"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 40s
+      start_period: 30s
 
   # Frontend Web Application
   frontend:
     build:
-      context: ./client
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: Dockerfile.frontend
     container_name: cardcataloger-frontend
     restart: unless-stopped
     ports:
-      - "8000:80"
+      - "8000:8000"
     networks:
       - cardcataloger-network
     depends_on:
-      backend:
-        condition: service_healthy
+      - backend
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     healthcheck:
-      test: ["CMD", "nginx", "-t"]
+      test: ["CMD", "curl", "-f", "http://localhost:8000"]
       interval: 30s
-      timeout: 5s
+      timeout: 10s
       retries: 3
-      start_period: 30s
-
-volumes:
-  mongodb_data:
-    driver: local
-  ollama_data:
-    driver: local
-  card_images:
-    driver: local
+      start_period: 10s
 
 networks:
   cardcataloger-network:
     driver: bridge
+    name: cardcataloger-network
+
+volumes:
+  mongodb_data:
+    name: cardcataloger-mongodb-data
+  ollama_data:
+    name: cardcataloger-ollama-data
+  backend_logs:
+    name: cardcataloger-backend-logs

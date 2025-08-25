@@ -1,427 +1,398 @@
-import { useState, useEffect } from 'react';
-import { Button } from '../components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
-import { Input } from '../components/ui/input';
-import { Label } from '../components/ui/label';
-import { Checkbox } from '../components/ui/checkbox';
-import { Progress } from '../components/ui/progress';
-import { Badge } from '../components/ui/badge';
-import { Separator } from '../components/ui/separator';
-import { Alert, AlertDescription } from '../components/ui/alert';
+import { useState, useEffect } from 'react'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Checkbox } from '@/components/ui/checkbox'
+import { Progress } from '@/components/ui/progress'
+import { Badge } from '@/components/ui/badge'
 import {
-  Folder,
-  Search,
+  FolderOpen,
+  ScanLine,
   Play,
+  Pause,
   CheckCircle,
   AlertCircle,
-  FileImage,
-  Clock,
-  Zap
-} from 'lucide-react';
-import { useToast } from '../hooks/useToast';
-import { scanDirectory, processCards, getProcessingProgress, CardPair, ScanResult, ProcessingProgress } from '../api/cards';
+  Image as ImageIcon,
+  Images
+} from 'lucide-react'
+import { scanDirectory, processCards, getProcessingProgress } from '@/api/cards'
+import { useToast } from '@/hooks/useToast'
+import type { ProcessingProgress } from '@/api/cards'
+import { ImageWithFallback } from '@/components/ui/image-with-fallback'
+
+interface ScannedCard {
+  frontImage: string
+  backImage?: string
+  lotNumber: string
+  iteration: string
+}
 
 export function ProcessCards() {
-  const { toast } = useToast();
-
-  // Directory scanning state - Start with empty directory
-  const [directory, setDirectory] = useState('');
-  const [includeSubdirectories, setIncludeSubdirectories] = useState(true);
-  const [isScanning, setIsScanning] = useState(false);
-  const [scannedCards, setScannedCards] = useState<ScanResult | null>(null);
-
-  // Card selection state
-  const [selectedCards, setSelectedCards] = useState<string[]>([]);
-
-  // Processing state
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [processingJobId, setProcessingJobId] = useState<string | null>(null);
-  const [processingProgress, setProcessingProgress] = useState<ProcessingProgress | null>(null);
+  const [directory, setDirectory] = useState('/tmp/test-cards')
+  const [includeSubdirectories, setIncludeSubdirectories] = useState(true)
+  const [scannedCards, setScannedCards] = useState<ScannedCard[]>([])
+  const [selectedCards, setSelectedCards] = useState<string[]>([])
+  const [scanning, setScanning] = useState(false)
+  const [processing, setProcessing] = useState(false)
+  const [progress, setProgress] = useState<ProcessingProgress | null>(null)
+  const [jobId, setJobId] = useState<string | null>(null)
+  const [scanResults, setScanResults] = useState<{
+    totalImages: number
+    validPairs: number
+    singleCards: number
+  } | null>(null)
+  const { toast } = useToast()
 
   const handleScanDirectory = async () => {
     if (!directory.trim()) {
       toast({
         title: "Error",
         description: "Please enter a directory path",
-        variant: "destructive",
-      });
-      return;
+        variant: "destructive"
+      })
+      return
     }
 
+    setScanning(true)
     try {
-      setIsScanning(true);
-      console.log('Scanning directory:', directory);
-
-      const response = await scanDirectory({
-        directory: directory.trim(),
-        includeSubdirectories
-      });
-
-      console.log('Scan response:', response);
-
-      // Defensive programming - ensure response structure
-      if (!response || !response.success || !response.data) {
-        throw new Error('Invalid response from server');
-      }
-
-      const scanResult = response.data;
-
-      // Ensure arrays exist
-      if (!scanResult.validPairs) {
-        scanResult.validPairs = [];
-      }
-      if (!scanResult.singleCards) {
-        scanResult.singleCards = [];
-      }
-
-      setScannedCards(scanResult);
-      setSelectedCards([]); // Reset selection
-
-      const totalCards = scanResult.validPairs.length + scanResult.singleCards.length;
-
+      console.log('Scanning directory:', directory)
+      const response = await scanDirectory({ directory, includeSubdirectories })
+      setScannedCards(response.cards)
+      setScanResults({
+        totalImages: response.totalImages,
+        validPairs: response.validPairs,
+        singleCards: response.singleCards
+      })
       toast({
-        title: "Scan Complete",
-        description: `Found ${totalCards} cards (${scanResult.validPairs.length} pairs, ${scanResult.singleCards.length} singles)`,
-      });
-
+        title: "Success",
+        description: `Found ${response.cards.length} cards to process`
+      })
     } catch (error) {
-      console.error('Scan error:', error);
+      console.error('Failed to scan directory:', error)
       toast({
         title: "Error",
-        description: error instanceof Error ? error.message : "Failed to scan directory",
-        variant: "destructive",
-      });
-      setScannedCards(null);
+        description: "Failed to scan directory",
+        variant: "destructive"
+      })
     } finally {
-      setIsScanning(false);
+      setScanning(false)
     }
-  };
+  }
 
-  const handleCardSelection = (cardId: string, checked: boolean) => {
-    if (checked) {
-      setSelectedCards(prev => [...prev, cardId]);
+  const handleSelectAll = () => {
+    if (selectedCards.length === scannedCards.length) {
+      setSelectedCards([])
     } else {
-      setSelectedCards(prev => prev.filter(id => id !== cardId));
+      setSelectedCards(scannedCards.map((_, index) => index.toString()))
     }
-  };
+  }
 
-  const handleSelectAll = (checked: boolean) => {
-    if (!scannedCards) return;
-
-    if (checked) {
-      const allCardIds = [
-        ...scannedCards.validPairs.map(card => card.id),
-        ...scannedCards.singleCards.map(card => card.id)
-      ];
-      setSelectedCards(allCardIds);
-    } else {
-      setSelectedCards([]);
-    }
-  };
+  const handleCardSelect = (index: string) => {
+    setSelectedCards(prev =>
+      prev.includes(index)
+        ? prev.filter(id => id !== index)
+        : [...prev, index]
+    )
+  }
 
   const handleProcessCards = async () => {
     if (selectedCards.length === 0) {
       toast({
         title: "Error",
-        description: "Please select at least one card to process",
-        variant: "destructive",
-      });
-      return;
+        description: "Please select cards to process",
+        variant: "destructive"
+      })
+      return
     }
 
+    setProcessing(true)
     try {
-      setIsProcessing(true);
-
+      console.log('Processing cards:', selectedCards)
       const response = await processCards({
-        selectedCards,
-        directory
-      });
-
-      if (response.success && response.jobId) {
-        setProcessingJobId(response.jobId);
-
-        // Start polling for progress
-        pollProcessingProgress(response.jobId);
-
-        toast({
-          title: "Processing Started",
-          description: `Processing ${selectedCards.length} cards`,
-        });
-      } else {
-        throw new Error('Failed to start processing');
-      }
-
+        directory,
+        includeSubdirectories,
+        selectedCards
+      })
+      setJobId(response.jobId)
+      toast({
+        title: "Success",
+        description: "Card processing started"
+      })
     } catch (error) {
-      console.error('Processing error:', error);
+      console.error('Failed to start processing:', error)
       toast({
         title: "Error",
-        description: error instanceof Error ? error.message : "Failed to start processing",
-        variant: "destructive",
-      });
-      setIsProcessing(false);
+        description: "Failed to start processing",
+        variant: "destructive"
+      })
+      setProcessing(false)
     }
-  };
+  }
 
-  const pollProcessingProgress = async (jobId: string) => {
-    try {
-      const response = await getProcessingProgress(jobId);
-      setProcessingProgress(response.progress);
+  useEffect(() => {
+    let interval: NodeJS.Timeout
+    if (processing && jobId) {
+      interval = setInterval(async () => {
+        try {
+          const progressData = await getProcessingProgress(jobId)
+          setProgress(progressData)
 
-      if (response.progress.status === 'processing') {
-        // Continue polling
-        setTimeout(() => pollProcessingProgress(jobId), 2000);
-      } else if (response.progress.status === 'completed') {
-        setIsProcessing(false);
-        toast({
-          title: "Processing Complete",
-          description: `Successfully processed ${response.progress.cardsCompleted} cards`,
-        });
-      } else if (response.progress.status === 'failed') {
-        setIsProcessing(false);
-        toast({
-          title: "Processing Failed",
-          description: "Some cards failed to process. Check the progress details.",
-          variant: "destructive",
-        });
-      }
-    } catch (error) {
-      console.error('Progress polling error:', error);
-      setIsProcessing(false);
-    }
-  };
-
-  const renderCardList = () => {
-    if (!scannedCards) return null;
-
-    const allCards = [...scannedCards.validPairs, ...scannedCards.singleCards];
-
-    if (allCards.length === 0) {
-      return (
-        <Alert>
-          <AlertCircle className="h-4 w-4" />
-          <AlertDescription>
-            No card images found in the specified directory. Make sure your images follow the naming convention: lot-iteration-front.jpg
-          </AlertDescription>
-        </Alert>
-      );
+          if (progressData.completed === progressData.total) {
+            setProcessing(false)
+            toast({
+              title: "Complete",
+              description: "Card processing finished successfully"
+            })
+          }
+        } catch (error) {
+          console.error('Failed to get progress:', error)
+        }
+      }, 2000)
     }
 
-    const isAllSelected = allCards.length > 0 && selectedCards.length === allCards.length;
-    const isSomeSelected = selectedCards.length > 0 && selectedCards.length < allCards.length;
-
-    return (
-      <div className="space-y-4">
-        {/* Select All Checkbox */}
-        <div className="flex items-center space-x-2">
-          <Checkbox
-            id="select-all"
-            checked={isAllSelected}
-            ref={(el) => {
-              if (el) el.indeterminate = isSomeSelected;
-            }}
-            onCheckedChange={handleSelectAll}
-          />
-          <Label htmlFor="select-all" className="font-medium">
-            Select All ({allCards.length} cards)
-          </Label>
-        </div>
-
-        <Separator />
-
-        {/* Card List */}
-        <div className="space-y-2 max-h-96 overflow-y-auto">
-          {allCards.map((card) => (
-            <div key={card.id} className="flex items-center space-x-3 p-3 border rounded-lg">
-              <Checkbox
-                id={card.id}
-                checked={selectedCards.includes(card.id)}
-                onCheckedChange={(checked) => handleCardSelection(card.id, checked as boolean)}
-              />
-
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center space-x-2">
-                  <FileImage className="h-4 w-4 text-muted-foreground" />
-                  <span className="font-medium">{card.frontFile}</span>
-                  {card.hasBack && (
-                    <Badge variant="secondary" className="text-xs">
-                      Has Back
-                    </Badge>
-                  )}
-                  {!card.hasBack && (
-                    <Badge variant="outline" className="text-xs">
-                      Front Only
-                    </Badge>
-                  )}
-                </div>
-                <div className="text-sm text-muted-foreground">
-                  Lot: {card.lotNumber} • Iteration: {card.iteration}
-                </div>
-                {card.backFile && (
-                  <div className="text-sm text-muted-foreground">
-                    Back: {card.backFile}
-                  </div>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-    );
-  };
-
-  const renderProcessingProgress = () => {
-    if (!isProcessing || !processingProgress) return null;
-
-    return (
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center space-x-2">
-            <Zap className="h-5 w-5" />
-            <span>Processing Cards</span>
-          </CardTitle>
-          <CardDescription>
-            AI analysis in progress...
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <div className="flex justify-between text-sm">
-              <span>Progress</span>
-              <span>{processingProgress.progress}%</span>
-            </div>
-            <Progress value={processingProgress.progress} />
-          </div>
-
-          <div className="grid grid-cols-2 gap-4 text-sm">
-            <div>
-              <span className="text-muted-foreground">Status:</span>
-              <span className="ml-2 capitalize">{processingProgress.status}</span>
-            </div>
-            <div>
-              <span className="text-muted-foreground">Cards:</span>
-              <span className="ml-2">{processingProgress.cardsCompleted} / {processingProgress.totalCards}</span>
-            </div>
-          </div>
-
-          {processingProgress.currentCard && (
-            <div className="text-sm">
-              <span className="text-muted-foreground">Current:</span>
-              <span className="ml-2">{processingProgress.currentCard}</span>
-            </div>
-          )}
-
-          {processingProgress.estimatedTimeRemaining && (
-            <div className="flex items-center space-x-2 text-sm text-muted-foreground">
-              <Clock className="h-4 w-4" />
-              <span>~{Math.round(processingProgress.estimatedTimeRemaining / 60)} minutes remaining</span>
-            </div>
-          )}
-
-          {processingProgress.errors && processingProgress.errors.length > 0 && (
-            <Alert variant="destructive">
-              <AlertCircle className="h-4 w-4" />
-              <AlertDescription>
-                {processingProgress.errors.length} error(s) occurred during processing
-              </AlertDescription>
-            </Alert>
-          )}
-        </CardContent>
-      </Card>
-    );
-  };
+    return () => {
+      if (interval) clearInterval(interval)
+    }
+  }, [processing, jobId, toast])
 
   return (
-    <div className="container mx-auto p-6 space-y-6">
+    <div className="space-y-6">
+      {/* Header */}
       <div>
-        <h1 className="text-3xl font-bold">Process Cards</h1>
-        <p className="text-muted-foreground">
-          Scan directories for card images and process them with AI analysis
+        <h1 className="text-3xl font-bold text-slate-900 dark:text-white">Process Cards</h1>
+        <p className="text-slate-600 dark:text-slate-400 mt-1">
+          Scan directories and process card images with AI recognition
         </p>
       </div>
 
       {/* Directory Selection */}
-      <Card>
+      <Card className="bg-white/80 dark:bg-slate-800/80 backdrop-blur-xl border-slate-200/50 dark:border-slate-700/50">
         <CardHeader>
-          <CardTitle className="flex items-center space-x-2">
-            <Folder className="h-5 w-5" />
-            <span>Directory Selection</span>
+          <CardTitle className="flex items-center text-slate-900 dark:text-white">
+            <FolderOpen className="w-5 h-5 mr-2" />
+            Directory Selection
           </CardTitle>
-          <CardDescription>
-            Select the directory containing your card images
-          </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="directory">Directory Path</Label>
+            <Label htmlFor="directory">Source Directory</Label>
             <Input
               id="directory"
               value={directory}
               onChange={(e) => setDirectory(e.target.value)}
-              placeholder="/path/to/your/card/images"
+              placeholder="/path/to/card/images"
+              className="bg-white dark:bg-slate-900"
             />
-            <div className="text-sm text-muted-foreground">
-              Enter the full path to your card images directory. Images should follow the naming pattern: lot-iteration-front.jpg
-            </div>
           </div>
 
           <div className="flex items-center space-x-2">
             <Checkbox
               id="subdirectories"
               checked={includeSubdirectories}
-              onCheckedChange={setIncludeSubdirectories}
+              onCheckedChange={(checked) => setIncludeSubdirectories(checked as boolean)}
             />
             <Label htmlFor="subdirectories">Include subdirectories (recursive scan)</Label>
           </div>
 
           <Button
             onClick={handleScanDirectory}
-            disabled={isScanning}
-            className="w-full"
+            disabled={scanning}
+            className="bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white"
           >
-            <Search className="h-4 w-4 mr-2" />
-            {isScanning ? 'Scanning...' : 'Scan Directory'}
+            {scanning ? (
+              <>
+                <ScanLine className="w-4 h-4 mr-2 animate-spin" />
+                Scanning...
+              </>
+            ) : (
+              <>
+                <ScanLine className="w-4 h-4 mr-2" />
+                Scan Directory
+              </>
+            )}
           </Button>
         </CardContent>
       </Card>
 
       {/* Scan Results */}
-      {scannedCards && (
-        <Card>
+      {scanResults && (
+        <Card className="bg-white/80 dark:bg-slate-800/80 backdrop-blur-xl border-slate-200/50 dark:border-slate-700/50">
           <CardHeader>
-            <CardTitle className="flex items-center space-x-2">
-              <CheckCircle className="h-5 w-5" />
-              <span>Scan Results</span>
-            </CardTitle>
-            <CardDescription>
-              Found {(scannedCards.validPairs?.length || 0) + (scannedCards.singleCards?.length || 0)} cards
-              ({scannedCards.validPairs?.length || 0} pairs, {scannedCards.singleCards?.length || 0} singles)
-            </CardDescription>
+            <CardTitle className="text-slate-900 dark:text-white">Scan Results</CardTitle>
           </CardHeader>
           <CardContent>
-            {renderCardList()}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="text-center p-4 bg-slate-50 dark:bg-slate-800 rounded-lg">
+                <div className="text-2xl font-bold text-slate-900 dark:text-white">
+                  {scanResults.totalImages}
+                </div>
+                <div className="text-sm text-slate-600 dark:text-slate-400">Total Images</div>
+              </div>
+              <div className="text-center p-4 bg-green-50 dark:bg-green-900/20 rounded-lg">
+                <div className="text-2xl font-bold text-green-600 dark:text-green-400">
+                  {scanResults.validPairs}
+                </div>
+                <div className="text-sm text-slate-600 dark:text-slate-400">Valid Pairs</div>
+              </div>
+              <div className="text-center p-4 bg-orange-50 dark:bg-orange-900/20 rounded-lg">
+                <div className="text-2xl font-bold text-orange-600 dark:text-orange-400">
+                  {scanResults.singleCards}
+                </div>
+                <div className="text-sm text-slate-600 dark:text-slate-400">Single Cards</div>
+              </div>
+            </div>
           </CardContent>
         </Card>
       )}
 
-      {/* Process Button */}
-      {scannedCards && (scannedCards.validPairs?.length > 0 || scannedCards.singleCards?.length > 0) && (
-        <Card>
-          <CardContent className="pt-6">
-            <Button
-              onClick={handleProcessCards}
-              disabled={selectedCards.length === 0 || isProcessing}
-              className="w-full"
-              size="lg"
-            >
-              <Play className="h-4 w-4 mr-2" />
-              Process Selected Cards ({selectedCards.length})
-            </Button>
+      {/* Card Selection */}
+      {scannedCards.length > 0 && (
+        <Card className="bg-white/80 dark:bg-slate-800/80 backdrop-blur-xl border-slate-200/50 dark:border-slate-700/50">
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-slate-900 dark:text-white">
+                Card Selection ({selectedCards.length} of {scannedCards.length} selected)
+              </CardTitle>
+              <div className="space-x-2">
+                <Button variant="outline" onClick={handleSelectAll}>
+                  {selectedCards.length === scannedCards.length ? 'Deselect All' : 'Select All'}
+                </Button>
+                <Button
+                  onClick={handleProcessCards}
+                  disabled={selectedCards.length === 0 || processing}
+                  className="bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white"
+                >
+                  <Play className="w-4 h-4 mr-2" />
+                  Process Selected Cards
+                </Button>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+              {scannedCards.map((card, index) => (
+                <div key={index} className="border border-slate-200 dark:border-slate-700 rounded-lg p-3 hover:shadow-md transition-shadow">
+                  <div className="flex items-center space-x-2 mb-3">
+                    <Checkbox
+                      checked={selectedCards.includes(index.toString())}
+                      onCheckedChange={() => handleCardSelect(index.toString())}
+                    />
+                    <span className="text-sm font-medium text-slate-900 dark:text-white">
+                      {card.lotNumber}-{card.iteration}
+                    </span>
+                  </div>
+
+                  <div className="flex space-x-2">
+                    <div className="flex-1">
+                      <ImageWithFallback
+                        src={card.frontImage}
+                        alt="Front"
+                        className="w-full h-24 object-cover rounded border"
+                        fallbackClassName="w-full h-24 rounded border"
+                      />
+                      <div className="flex items-center justify-center mt-1">
+                        <ImageIcon className="w-3 h-3 mr-1" />
+                        <span className="text-xs text-slate-600 dark:text-slate-400">Front</span>
+                      </div>
+                    </div>
+
+                    <div className="flex-1">
+                      {card.backImage ? (
+                        <>
+                          <ImageWithFallback
+                            src={card.backImage}
+                            alt="Back"
+                            className="w-full h-24 object-cover rounded border"
+                            fallbackClassName="w-full h-24 rounded border"
+                          />
+                          <div className="flex items-center justify-center mt-1">
+                            <Images className="w-3 h-3 mr-1" />
+                            <span className="text-xs text-slate-600 dark:text-slate-400">Back</span>
+                          </div>
+                        </>
+                      ) : (
+                        <div className="w-full h-24 bg-slate-100 dark:bg-slate-700 rounded border flex items-center justify-center">
+                          <div className="text-center">
+                            <AlertCircle className="w-4 h-4 mx-auto text-slate-400 mb-1" />
+                            <span className="text-xs text-slate-500 dark:text-slate-400">No Back</span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
           </CardContent>
         </Card>
       )}
 
       {/* Processing Progress */}
-      {renderProcessingProgress()}
+      {processing && progress && (
+        <Card className="bg-white/80 dark:bg-slate-800/80 backdrop-blur-xl border-slate-200/50 dark:border-slate-700/50">
+          <CardHeader>
+            <CardTitle className="flex items-center text-slate-900 dark:text-white">
+              <Play className="w-5 h-5 mr-2" />
+              Processing Progress
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <div className="flex justify-between text-sm">
+                <span>Progress</span>
+                <span>{progress.completed} of {progress.total} cards</span>
+              </div>
+              <Progress value={(progress.completed / progress.total) * 100} className="h-2" />
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+              <div>
+                <span className="text-slate-600 dark:text-slate-400">Speed:</span>
+                <span className="ml-2 font-medium">{progress.speed} cards/min</span>
+              </div>
+              <div>
+                <span className="text-slate-600 dark:text-slate-400">Time Remaining:</span>
+                <span className="ml-2 font-medium">{progress.estimatedTimeRemaining} min</span>
+              </div>
+              <div>
+                <span className="text-slate-600 dark:text-slate-400">Errors:</span>
+                <span className="ml-2 font-medium">{progress.errors.length}</span>
+              </div>
+            </div>
+
+            {progress.currentCard && (
+              <div className="border border-slate-200 dark:border-slate-700 rounded-lg p-4">
+                <h4 className="font-medium mb-2 text-slate-900 dark:text-white">Currently Processing</h4>
+                <div className="flex space-x-4">
+                  <ImageWithFallback
+                    src={progress.currentCard.frontImage}
+                    alt="Current front"
+                    className="w-16 h-20 object-cover rounded border"
+                    fallbackClassName="w-16 h-20 rounded border"
+                  />
+                  {progress.currentCard.backImage && (
+                    <ImageWithFallback
+                      src={progress.currentCard.backImage}
+                      alt="Current back"
+                      className="w-16 h-20 object-cover rounded border"
+                      fallbackClassName="w-16 h-20 rounded border"
+                    />
+                  )}
+                  <div className="flex-1">
+                    <p className="font-medium text-slate-900 dark:text-white">
+                      {progress.currentCard.lotNumber}-{progress.currentCard.iteration}
+                    </p>
+                    <p className="text-sm text-slate-600 dark:text-slate-400">
+                      Analyzing with AI...
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
     </div>
-  );
+  )
 }

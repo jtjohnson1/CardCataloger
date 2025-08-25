@@ -1,496 +1,389 @@
-import { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import { Card, getCard, updateCard } from '../api/cards';
-import { PriceComparison, getCardPricing } from '../api/pricing';
-import { Button } from '../components/ui/button';
-import { Card as UICard, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
-import { Badge } from '../components/ui/badge';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
-import { Input } from '../components/ui/input';
-import { Label } from '../components/ui/label';
-import { Textarea } from '../components/ui/textarea';
-import { Separator } from '../components/ui/separator';
-import { ArrowLeft, Edit, Save, X, RefreshCw, TrendingUp, TrendingDown, Minus } from 'lucide-react';
-import { useToast } from '../hooks/useToast';
-import { ImageWithFallback } from '../components/ui/image-with-fallback';
-import { getCardImageUrl } from '../api/cards';
+import { useState, useEffect } from 'react'
+import { useParams, Link } from 'react-router-dom'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { ImageWithFallback } from '@/components/ui/image-with-fallback'
+import {
+  ArrowLeft,
+  Calendar,
+  DollarSign,
+  TrendingUp,
+  TrendingDown,
+  ExternalLink,
+  Edit,
+  ZoomIn
+} from 'lucide-react'
+import { getCardById } from '@/api/cards'
+import { getPriceComparison } from '@/api/pricing'
+import { useToast } from '@/hooks/useToast'
+import type { Card as CardType } from '@/api/cards'
+import type { PriceComparison } from '@/api/pricing'
 
 export function CardDetail() {
-  const { id } = useParams<{ id: string }>();
-  const navigate = useNavigate();
-  const { toast } = useToast();
-  
-  const [card, setCard] = useState<Card | null>(null);
-  const [pricing, setPricing] = useState<PriceComparison | null>(null);
-  const [isEditing, setIsEditing] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isSaving, setIsSaving] = useState(false);
-  const [isRefreshingPricing, setIsRefreshingPricing] = useState(false);
-  const [editedCard, setEditedCard] = useState<Partial<Card>>({});
+  const { id } = useParams<{ id: string }>()
+  const [card, setCard] = useState<CardType | null>(null)
+  const [priceData, setPriceData] = useState<PriceComparison | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [imageZoom, setImageZoom] = useState<'front' | 'back' | null>(null)
+  const { toast } = useToast()
 
   useEffect(() => {
-    if (id) {
-      fetchCard();
-      fetchPricing();
+    const fetchCardData = async () => {
+      if (!id) return
+
+      console.log('CardDetail: Received ID from URL params:', id);
+      console.log('CardDetail: ID type:', typeof id);
+      console.log('CardDetail: ID length:', id.length);
+
+      try {
+        console.log('Fetching card details for ID:', id)
+        const [cardResponse, priceResponse] = await Promise.all([
+          getCardById(id),
+          getPriceComparison(id)
+        ])
+        console.log('CardDetail: Successfully fetched card:', cardResponse.card);
+        setCard(cardResponse.card)
+        setPriceData(priceResponse)
+      } catch (error) {
+        console.error('Failed to fetch card data:', error)
+        console.error('CardDetail: Error details:', {
+          message: error.message,
+          id: id,
+          idType: typeof id
+        });
+        toast({
+          title: "Error",
+          description: "Failed to load card details",
+          variant: "destructive"
+        })
+      } finally {
+        setLoading(false)
+      }
     }
-  }, [id]);
 
-  const fetchCard = async () => {
-    if (!id) return;
-    
-    try {
-      setIsLoading(true);
-      const response = await getCard(id);
-      setCard(response.card);
-      setEditedCard(response.card);
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "Failed to load card details",
-        variant: "destructive",
-      });
-    } finally {
-      setIsLoading(false);
-    }
-  };
+    fetchCardData()
+  }, [id, toast])
 
-  const fetchPricing = async () => {
-    if (!id) return;
-    
-    try {
-      const response = await getCardPricing(id);
-      setPricing(response.pricing);
-    } catch (error) {
-      console.error('Failed to load pricing data:', error);
-    }
-  };
-
-  const handleSave = async () => {
-    if (!id || !editedCard) return;
-
-    try {
-      setIsSaving(true);
-      const response = await updateCard(id, editedCard);
-      setCard(response.card);
-      setIsEditing(false);
-      toast({
-        title: "Success",
-        description: "Card updated successfully",
-      });
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "Failed to update card",
-        variant: "destructive",
-      });
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  const handleCancel = () => {
-    setEditedCard(card || {});
-    setIsEditing(false);
-  };
-
-  const handleRefreshPricing = async () => {
-    if (!id) return;
-    
-    try {
-      setIsRefreshingPricing(true);
-      // Note: refreshCardPricing function would need to be implemented
-      await fetchPricing();
-      toast({
-        title: "Success",
-        description: "Pricing data refreshed",
-      });
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: "Failed to refresh pricing data",
-        variant: "destructive",
-      });
-    } finally {
-      setIsRefreshingPricing(false);
-    }
-  };
-
-  const getTrendIcon = (trend: string) => {
-    switch (trend) {
-      case 'up':
-        return <TrendingUp className="h-4 w-4 text-green-500" />;
-      case 'down':
-        return <TrendingDown className="h-4 w-4 text-red-500" />;
-      default:
-        return <Minus className="h-4 w-4 text-gray-500" />;
-    }
-  };
-
-  if (isLoading) {
+  if (loading) {
     return (
-      <div className="container mx-auto p-6">
-        <div className="flex items-center justify-center h-64">
-          <div className="text-lg">Loading card details...</div>
+      <div className="space-y-6">
+        <div className="flex items-center space-x-4">
+          <div className="w-8 h-8 bg-slate-200 dark:bg-slate-700 rounded animate-pulse" />
+          <div className="w-48 h-8 bg-slate-200 dark:bg-slate-700 rounded animate-pulse" />
+        </div>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="w-full h-96 bg-slate-200 dark:bg-slate-700 rounded-lg animate-pulse" />
+          <div className="space-y-4">
+            <div className="w-full h-8 bg-slate-200 dark:bg-slate-700 rounded animate-pulse" />
+            <div className="w-3/4 h-6 bg-slate-200 dark:bg-slate-700 rounded animate-pulse" />
+            <div className="w-1/2 h-6 bg-slate-200 dark:bg-slate-700 rounded animate-pulse" />
+          </div>
         </div>
       </div>
-    );
+    )
   }
 
   if (!card) {
     return (
-      <div className="container mx-auto p-6">
-        <div className="flex items-center justify-center h-64">
-          <div className="text-lg text-muted-foreground">Card not found</div>
-        </div>
+      <div className="text-center py-12">
+        <h2 className="text-2xl font-bold text-slate-900 dark:text-white mb-4">Card Not Found</h2>
+        <Link to="/database">
+          <Button>
+            <ArrowLeft className="w-4 h-4 mr-2" />
+            Back to Database
+          </Button>
+        </Link>
       </div>
-    );
+    )
   }
 
   return (
-    <div className="container mx-auto p-6 space-y-6">
+    <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center space-x-4">
-          <Button variant="outline" size="sm" onClick={() => navigate('/database')}>
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            Back to Database
-          </Button>
-          <h1 className="text-3xl font-bold">{card.name}</h1>
-        </div>
-        <div className="flex items-center space-x-2">
-          {isEditing ? (
-            <>
-              <Button onClick={handleSave} disabled={isSaving}>
-                <Save className="h-4 w-4 mr-2" />
-                {isSaving ? 'Saving...' : 'Save'}
-              </Button>
-              <Button variant="outline" onClick={handleCancel}>
-                <X className="h-4 w-4 mr-2" />
-                Cancel
-              </Button>
-            </>
-          ) : (
-            <Button onClick={() => setIsEditing(true)}>
-              <Edit className="h-4 w-4 mr-2" />
-              Edit
+          <Link to="/database">
+            <Button variant="outline" size="sm">
+              <ArrowLeft className="w-4 h-4 mr-2" />
+              Back
             </Button>
-          )}
+          </Link>
+          <div>
+            <h1 className="text-3xl font-bold text-slate-900 dark:text-white">{card.name}</h1>
+            <p className="text-slate-600 dark:text-slate-400">
+              {card.year} • {card.manufacturer} • #{card.cardNumber}
+            </p>
+          </div>
         </div>
+        <Button variant="outline">
+          <Edit className="w-4 h-4 mr-2" />
+          Edit Card
+        </Button>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Card Images */}
-        <div className="lg:col-span-1">
-          <UICard>
-            <CardHeader>
-              <CardTitle>Card Images</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {/* Front Image */}
-              <div>
-                <Label className="text-sm font-medium">Front</Label>
-                <div className="mt-2">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Images */}
+        <Card className="bg-white/80 dark:bg-slate-800/80 backdrop-blur-xl border-slate-200/50 dark:border-slate-700/50">
+          <CardHeader>
+            <CardTitle className="text-slate-900 dark:text-white">Card Images</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <div className="relative group cursor-pointer" onClick={() => setImageZoom('front')}>
                   <ImageWithFallback
-                    src={getCardImageUrl(card.images.front)}
-                    alt={`${card.name} - Front`}
-                    className="w-full h-auto rounded-lg border"
-                    fallbackText="Front Image"
+                    src={card.frontImage}
+                    alt="Card Front"
+                    className="w-full aspect-[3/4] object-cover rounded-lg border"
+                    fallbackClassName="w-full aspect-[3/4] rounded-lg border"
                   />
+                  <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors rounded-lg flex items-center justify-center">
+                    <ZoomIn className="w-8 h-8 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
+                  </div>
                 </div>
+                <p className="text-center text-sm text-slate-600 dark:text-slate-400">Front</p>
               </div>
 
-              {/* Back Image */}
-              <div>
-                <Label className="text-sm font-medium">Back</Label>
-                <div className="mt-2">
-                  {card.images.back ? (
+              {card.backImage ? (
+                <div className="space-y-2">
+                  <div className="relative group cursor-pointer" onClick={() => setImageZoom('back')}>
                     <ImageWithFallback
-                      src={getCardImageUrl(card.images.back)}
-                      alt={`${card.name} - Back`}
-                      className="w-full h-auto rounded-lg border"
-                      fallbackText="Back Image"
+                      src={card.backImage}
+                      alt="Card Back"
+                      className="w-full aspect-[3/4] object-cover rounded-lg border"
+                      fallbackClassName="w-full aspect-[3/4] rounded-lg border"
                     />
-                  ) : (
-                    <div className="w-full h-48 bg-muted rounded-lg border flex items-center justify-center">
-                      <span className="text-muted-foreground">No back image available</span>
+                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors rounded-lg flex items-center justify-center">
+                      <ZoomIn className="w-8 h-8 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
                     </div>
-                  )}
+                  </div>
+                  <p className="text-center text-sm text-slate-600 dark:text-slate-400">Back</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <div className="w-full aspect-[3/4] bg-slate-100 dark:bg-slate-700 rounded-lg border flex items-center justify-center">
+                    <div className="text-center">
+                      <p className="text-slate-500 dark:text-slate-400">No back image available</p>
+                    </div>
+                  </div>
+                  <p className="text-center text-sm text-slate-600 dark:text-slate-400">Back</p>
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Card Information */}
+        <Card className="bg-white/80 dark:bg-slate-800/80 backdrop-blur-xl border-slate-200/50 dark:border-slate-700/50">
+          <CardHeader>
+            <CardTitle className="text-slate-900 dark:text-white">Card Information</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="text-sm font-medium text-slate-600 dark:text-slate-400">Player</label>
+                <p className="text-slate-900 dark:text-white">{card.player}</p>
+              </div>
+              <div>
+                <label className="text-sm font-medium text-slate-600 dark:text-slate-400">Sport</label>
+                <p className="text-slate-900 dark:text-white">{card.sport}</p>
+              </div>
+              <div>
+                <label className="text-sm font-medium text-slate-600 dark:text-slate-400">Set</label>
+                <p className="text-slate-900 dark:text-white">{card.set}</p>
+              </div>
+              <div>
+                <label className="text-sm font-medium text-slate-600 dark:text-slate-400">Series</label>
+                <p className="text-slate-900 dark:text-white">{card.series}</p>
+              </div>
+              <div>
+                <label className="text-sm font-medium text-slate-600 dark:text-slate-400">Condition</label>
+                <Badge variant="secondary">{card.condition}</Badge>
+              </div>
+              <div>
+                <label className="text-sm font-medium text-slate-600 dark:text-slate-400">Estimated Value</label>
+                <p className="text-2xl font-bold text-green-600 dark:text-green-400">
+                  ${card.estimatedValue.toLocaleString()}
+                </p>
+              </div>
+            </div>
+
+            <div className="border-t pt-4">
+              <h4 className="font-medium text-slate-900 dark:text-white mb-2">File Information</h4>
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <div>
+                  <label className="text-slate-600 dark:text-slate-400">Lot Number</label>
+                  <p className="text-slate-900 dark:text-white font-mono">{card.lotNumber}</p>
+                </div>
+                <div>
+                  <label className="text-slate-600 dark:text-slate-400">Iteration</label>
+                  <p className="text-slate-900 dark:text-white font-mono">{card.iteration}</p>
+                </div>
+                <div>
+                  <label className="text-slate-600 dark:text-slate-400">Date Added</label>
+                  <p className="text-slate-900 dark:text-white">{new Date(card.dateAdded).toLocaleDateString()}</p>
                 </div>
               </div>
-            </CardContent>
-          </UICard>
-        </div>
-
-        {/* Card Details and Pricing */}
-        <div className="lg:col-span-2">
-          <Tabs defaultValue="details" className="space-y-4">
-            <TabsList>
-              <TabsTrigger value="details">Card Details</TabsTrigger>
-              <TabsTrigger value="pricing">Price Comparison</TabsTrigger>
-            </TabsList>
-
-            {/* Card Details Tab */}
-            <TabsContent value="details">
-              <UICard>
-                <CardHeader>
-                  <CardTitle>Card Information</CardTitle>
-                  <CardDescription>
-                    Detailed information about this card
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-6">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <Label htmlFor="name">Card Name</Label>
-                      {isEditing ? (
-                        <Input
-                          id="name"
-                          value={editedCard.name || ''}
-                          onChange={(e) => setEditedCard({ ...editedCard, name: e.target.value })}
-                        />
-                      ) : (
-                        <div className="mt-1 text-sm">{card.name}</div>
-                      )}
-                    </div>
-
-                    <div>
-                      <Label htmlFor="manufacturer">Manufacturer</Label>
-                      {isEditing ? (
-                        <Input
-                          id="manufacturer"
-                          value={editedCard.manufacturer || ''}
-                          onChange={(e) => setEditedCard({ ...editedCard, manufacturer: e.target.value })}
-                        />
-                      ) : (
-                        <div className="mt-1 text-sm">{card.manufacturer}</div>
-                      )}
-                    </div>
-
-                    <div>
-                      <Label htmlFor="year">Year</Label>
-                      {isEditing ? (
-                        <Input
-                          id="year"
-                          type="number"
-                          value={editedCard.year || ''}
-                          onChange={(e) => setEditedCard({ ...editedCard, year: parseInt(e.target.value) })}
-                        />
-                      ) : (
-                        <div className="mt-1 text-sm">{card.year}</div>
-                      )}
-                    </div>
-
-                    <div>
-                      <Label htmlFor="player">Player/Subject</Label>
-                      {isEditing ? (
-                        <Input
-                          id="player"
-                          value={editedCard.player || ''}
-                          onChange={(e) => setEditedCard({ ...editedCard, player: e.target.value })}
-                        />
-                      ) : (
-                        <div className="mt-1 text-sm">{card.player}</div>
-                      )}
-                    </div>
-
-                    <div>
-                      <Label htmlFor="team">Team</Label>
-                      {isEditing ? (
-                        <Input
-                          id="team"
-                          value={editedCard.team || ''}
-                          onChange={(e) => setEditedCard({ ...editedCard, team: e.target.value })}
-                        />
-                      ) : (
-                        <div className="mt-1 text-sm">{card.team}</div>
-                      )}
-                    </div>
-
-                    <div>
-                      <Label htmlFor="cardNumber">Card Number</Label>
-                      {isEditing ? (
-                        <Input
-                          id="cardNumber"
-                          value={editedCard.cardNumber || ''}
-                          onChange={(e) => setEditedCard({ ...editedCard, cardNumber: e.target.value })}
-                        />
-                      ) : (
-                        <div className="mt-1 text-sm">{card.cardNumber}</div>
-                      )}
-                    </div>
-
-                    <div>
-                      <Label htmlFor="series">Series</Label>
-                      {isEditing ? (
-                        <Input
-                          id="series"
-                          value={editedCard.series || ''}
-                          onChange={(e) => setEditedCard({ ...editedCard, series: e.target.value })}
-                        />
-                      ) : (
-                        <div className="mt-1 text-sm">{card.series}</div>
-                      )}
-                    </div>
-
-                    <div>
-                      <Label htmlFor="condition">Condition</Label>
-                      {isEditing ? (
-                        <Input
-                          id="condition"
-                          value={editedCard.condition || ''}
-                          onChange={(e) => setEditedCard({ ...editedCard, condition: e.target.value })}
-                        />
-                      ) : (
-                        <Badge variant="secondary">{card.condition}</Badge>
-                      )}
-                    </div>
-                  </div>
-
-                  <Separator />
-
-                  <div>
-                    <Label>File Information</Label>
-                    <div className="mt-2 space-y-2 text-sm text-muted-foreground">
-                      <div><strong>Lot Number:</strong> {card.fileInfo.lotNumber}</div>
-                      <div><strong>Iteration:</strong> {card.fileInfo.iteration}</div>
-                      <div><strong>Front File:</strong> {card.fileInfo.frontFile}</div>
-                      {card.fileInfo.backFile && (
-                        <div><strong>Back File:</strong> {card.fileInfo.backFile}</div>
-                      )}
-                      <div><strong>Date Added:</strong> {new Date(card.dateAdded).toLocaleDateString()}</div>
-                    </div>
-                  </div>
-                </CardContent>
-              </UICard>
-            </TabsContent>
-
-            {/* Pricing Tab */}
-            <TabsContent value="pricing">
-              <UICard>
-                <CardHeader>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <CardTitle>Price Comparison</CardTitle>
-                      <CardDescription>
-                        Market prices from various sources
-                      </CardDescription>
-                    </div>
-                    <Button 
-                      variant="outline" 
-                      size="sm"
-                      onClick={handleRefreshPricing}
-                      disabled={isRefreshingPricing}
-                    >
-                      <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshingPricing ? 'animate-spin' : ''}`} />
-                      Refresh
-                    </Button>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  {pricing ? (
-                    <div className="space-y-6">
-                      {/* Price Summary */}
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <div className="text-center p-4 bg-muted rounded-lg">
-                          <div className="text-2xl font-bold">${pricing.averagePrice.toFixed(2)}</div>
-                          <div className="text-sm text-muted-foreground">Average Price</div>
-                        </div>
-                        <div className="text-center p-4 bg-muted rounded-lg">
-                          <div className="text-2xl font-bold">${pricing.medianPrice.toFixed(2)}</div>
-                          <div className="text-sm text-muted-foreground">Median Price</div>
-                        </div>
-                        <div className="text-center p-4 bg-muted rounded-lg">
-                          <div className="flex items-center justify-center space-x-2">
-                            {getTrendIcon(pricing.trend)}
-                            <span className="text-2xl font-bold capitalize">{pricing.trend}</span>
-                          </div>
-                          <div className="text-sm text-muted-foreground">Price Trend</div>
-                        </div>
-                      </div>
-
-                      {/* Price Range */}
-                      <div>
-                        <Label>Price Range</Label>
-                        <div className="mt-2 text-sm">
-                          ${pricing.priceRange.min.toFixed(2)} - ${pricing.priceRange.max.toFixed(2)}
-                        </div>
-                      </div>
-
-                      {/* eBay Data */}
-                      {pricing.sources.ebay && (
-                        <div className="space-y-4">
-                          <Separator />
-                          <div>
-                            <h4 className="font-semibold mb-2">eBay Recent Sales</h4>
-                            {pricing.sources.ebay.recentSales.length > 0 ? (
-                              <div className="space-y-2">
-                                {pricing.sources.ebay.recentSales.slice(0, 5).map((sale, index) => (
-                                  <div key={index} className="flex justify-between items-center p-2 bg-muted rounded">
-                                    <div>
-                                      <div className="font-medium">{sale.title}</div>
-                                      <div className="text-sm text-muted-foreground">
-                                        {sale.condition} • {new Date(sale.date).toLocaleDateString()}
-                                      </div>
-                                    </div>
-                                    <div className="text-right">
-                                      <div className="font-bold">${sale.price.toFixed(2)}</div>
-                                      {sale.shipping && (
-                                        <div className="text-sm text-muted-foreground">
-                                          +${sale.shipping.toFixed(2)} shipping
-                                        </div>
-                                      )}
-                                    </div>
-                                  </div>
-                                ))}
-                              </div>
-                            ) : (
-                              <div className="text-muted-foreground">No recent sales data available</div>
-                            )}
-                          </div>
-
-                          <div>
-                            <h4 className="font-semibold mb-2">eBay Active Listings</h4>
-                            {pricing.sources.ebay.activeListings.length > 0 ? (
-                              <div className="space-y-2">
-                                {pricing.sources.ebay.activeListings.slice(0, 5).map((listing, index) => (
-                                  <div key={index} className="flex justify-between items-center p-2 bg-muted rounded">
-                                    <div>
-                                      <div className="font-medium">{listing.title}</div>
-                                      <div className="text-sm text-muted-foreground">{listing.condition}</div>
-                                    </div>
-                                    <div className="text-right">
-                                      <div className="font-bold">${listing.price.toFixed(2)}</div>
-                                      {listing.shipping && (
-                                        <div className="text-sm text-muted-foreground">
-                                          +${listing.shipping.toFixed(2)} shipping
-                                        </div>
-                                      )}
-                                    </div>
-                                  </div>
-                                ))}
-                              </div>
-                            ) : (
-                              <div className="text-muted-foreground">No active listings available</div>
-                            )}
-                          </div>
-
-                          <div className="text-xs text-muted-foreground">
-                            Last updated: {new Date(pricing.sources.ebay.lastUpdated).toLocaleString()}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  ) : (
-                    <div className="text-center py-8">
-                      <div className="text-muted-foreground">No pricing data available</div>
-                    </div>
-                  )}
-                </CardContent>
-              </UICard>
-            </TabsContent>
-          </Tabs>
-        </div>
+            </div>
+          </CardContent>
+        </Card>
       </div>
+
+      {/* Price Comparison */}
+      {priceData && (
+        <Card className="bg-white/80 dark:bg-slate-800/80 backdrop-blur-xl border-slate-200/50 dark:border-slate-700/50">
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-slate-900 dark:text-white">Price Comparison</CardTitle>
+              <div className="flex items-center space-x-4 text-sm text-slate-600 dark:text-slate-400">
+                <div className="flex items-center space-x-1">
+                  <Calendar className="w-4 h-4" />
+                  <span>Updated: {new Date(priceData.lastUpdated).toLocaleDateString()}</span>
+                </div>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+              <div className="text-center p-4 bg-slate-50 dark:bg-slate-800 rounded-lg">
+                <div className="text-2xl font-bold text-slate-900 dark:text-white">
+                  ${priceData.averagePrice.toLocaleString()}
+                </div>
+                <div className="text-sm text-slate-600 dark:text-slate-400">Average Price</div>
+              </div>
+              <div className="text-center p-4 bg-slate-50 dark:bg-slate-800 rounded-lg">
+                <div className="text-2xl font-bold text-slate-900 dark:text-white">
+                  ${priceData.medianPrice.toLocaleString()}
+                </div>
+                <div className="text-sm text-slate-600 dark:text-slate-400">Median Price</div>
+              </div>
+              <div className="text-center p-4 bg-slate-50 dark:bg-slate-800 rounded-lg">
+                <div className="text-2xl font-bold text-slate-900 dark:text-white">
+                  ${priceData.priceRange.min.toLocaleString()} - ${priceData.priceRange.max.toLocaleString()}
+                </div>
+                <div className="text-sm text-slate-600 dark:text-slate-400">Price Range</div>
+              </div>
+            </div>
+
+            <Tabs defaultValue="ebay-sold" className="w-full">
+              <TabsList className="grid w-full grid-cols-3">
+                <TabsTrigger value="ebay-sold">eBay Sold</TabsTrigger>
+                <TabsTrigger value="ebay-active">eBay Active</TabsTrigger>
+                <TabsTrigger value="other">Other Sources</TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="ebay-sold" className="space-y-4">
+                <div className="space-y-2">
+                  {priceData.sources.ebay.recentSales.map((sale, index) => (
+                    <div key={index} className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-800 rounded-lg">
+                      <div className="flex items-center space-x-3">
+                        <Badge variant="outline">{sale.condition}</Badge>
+                        <span className="text-sm text-slate-600 dark:text-slate-400">
+                          Sold on {new Date(sale.date).toLocaleDateString()}
+                        </span>
+                      </div>
+                      <div className="flex items-center space-x-3">
+                        <span className="font-bold text-slate-900 dark:text-white">
+                          ${sale.price.toLocaleString()}
+                        </span>
+                        {sale.url && (
+                          <Button variant="ghost" size="sm" asChild>
+                            <a href={sale.url} target="_blank" rel="noopener noreferrer">
+                              <ExternalLink className="w-4 h-4" />
+                            </a>
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </TabsContent>
+
+              <TabsContent value="ebay-active" className="space-y-4">
+                <div className="space-y-2">
+                  {priceData.sources.ebay.activeListings.map((listing, index) => (
+                    <div key={index} className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-800 rounded-lg">
+                      <div className="flex items-center space-x-3">
+                        <Badge variant="outline">{listing.condition}</Badge>
+                        <span className="text-sm text-slate-600 dark:text-slate-400">
+                          Listed on {new Date(listing.date).toLocaleDateString()}
+                        </span>
+                      </div>
+                      <div className="flex items-center space-x-3">
+                        <span className="font-bold text-slate-900 dark:text-white">
+                          ${listing.price.toLocaleString()}
+                        </span>
+                        {listing.url && (
+                          <Button variant="ghost" size="sm" asChild>
+                            <a href={listing.url} target="_blank" rel="noopener noreferrer">
+                              <ExternalLink className="w-4 h-4" />
+                            </a>
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </TabsContent>
+
+              <TabsContent value="other" className="space-y-4">
+                <div className="space-y-2">
+                  {priceData.sources.other.map((source, index) => (
+                    <div key={index} className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-800 rounded-lg">
+                      <div className="flex items-center space-x-3">
+                        <Badge variant="outline">{source.source}</Badge>
+                        <Badge variant="secondary">{source.condition}</Badge>
+                        <span className="text-sm text-slate-600 dark:text-slate-400">
+                          {new Date(source.date).toLocaleDateString()}
+                        </span>
+                      </div>
+                      <div className="flex items-center space-x-3">
+                        <span className="font-bold text-slate-900 dark:text-white">
+                          ${source.price.toLocaleString()}
+                        </span>
+                        {source.url && (
+                          <Button variant="ghost" size="sm" asChild>
+                            <a href={source.url} target="_blank" rel="noopener noreferrer">
+                              <ExternalLink className="w-4 h-4" />
+                            </a>
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </TabsContent>
+            </Tabs>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Image Zoom Modal */}
+      {imageZoom && (
+        <div
+          className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4"
+          onClick={() => setImageZoom(null)}
+        >
+          <div className="relative max-w-4xl max-h-full">
+            <ImageWithFallback
+              src={imageZoom === 'front' ? card.frontImage : card.backImage}
+              alt={`Card ${imageZoom}`}
+              className="max-w-full max-h-full object-contain rounded-lg"
+              fallbackClassName="max-w-full max-h-full rounded-lg flex items-center justify-center bg-slate-100 dark:bg-slate-700"
+            />
+            <Button
+              variant="outline"
+              size="sm"
+              className="absolute top-4 right-4 bg-white/90 hover:bg-white"
+              onClick={() => setImageZoom(null)}
+            >
+              Close
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
-  );
+  )
 }

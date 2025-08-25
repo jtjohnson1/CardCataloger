@@ -1,129 +1,123 @@
-const fs = require('fs');
+const fs = require('fs').promises;
 const path = require('path');
 
 class FileService {
   constructor() {
-    this.supportedImageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp'];
-    console.log('FileService initialized');
+    this.supportedExtensions = ['.jpg', '.jpeg', '.png', '.bmp', '.tiff'];
   }
 
-  async scanDirectory(directory, includeSubdirectories = false) {
+  async scanDirectory(directoryPath, includeSubdirectories = false) {
     try {
-      console.log(`FileService.scanDirectory - Scanning: ${directory}`);
+      console.log(`Scanning directory: ${directoryPath}, recursive: ${includeSubdirectories}`);
       
-      const files = this.getAllImageFiles(directory, includeSubdirectories);
-      console.log(`FileService.scanDirectory - Found ${files.length} image files`);
+      // Check if directory exists
+      const stats = await fs.stat(directoryPath);
+      if (!stats.isDirectory()) {
+        throw new Error('Path is not a directory');
+      }
+
+      const allFiles = await this.getAllFiles(directoryPath, includeSubdirectories);
+      const imageFiles = allFiles.filter(file => 
+        this.supportedExtensions.includes(path.extname(file).toLowerCase())
+      );
+
+      console.log(`Found ${imageFiles.length} image files out of ${allFiles.length} total files`);
+
+      const cardPairs = this.groupCardFiles(imageFiles);
       
-      const cardPairs = this.groupFilesIntoCardPairs(files);
-      console.log(`FileService.scanDirectory - Grouped into ${cardPairs.validPairs.length} pairs and ${cardPairs.singleCards.length} singles`);
-      
-      return {
-        totalImages: files.length,
+      const result = {
+        cards: cardPairs.cards,
+        totalImages: imageFiles.length,
         validPairs: cardPairs.validPairs,
         singleCards: cardPairs.singleCards
       };
+
+      console.log(`Scan results: ${result.validPairs} pairs, ${result.singleCards} single cards`);
+      return result;
+
     } catch (error) {
-      console.error('Error in FileService.scanDirectory:', error);
+      console.error('Error scanning directory:', error);
       throw error;
     }
   }
 
-  getAllImageFiles(directory, includeSubdirectories = false) {
+  async getAllFiles(dir, recursive) {
     const files = [];
-    
-    try {
-      const items = fs.readdirSync(directory);
-      
-      for (const item of items) {
-        const fullPath = path.join(directory, item);
-        const stats = fs.statSync(fullPath);
-        
-        if (stats.isDirectory() && includeSubdirectories) {
-          // Recursively scan subdirectories
-          const subFiles = this.getAllImageFiles(fullPath, true);
-          files.push(...subFiles);
-        } else if (stats.isFile()) {
-          const ext = path.extname(item).toLowerCase();
-          if (this.supportedImageExtensions.includes(ext)) {
-            files.push(fullPath);
-          }
-        }
+    const items = await fs.readdir(dir);
+
+    for (const item of items) {
+      const fullPath = path.join(dir, item);
+      const stat = await fs.stat(fullPath);
+
+      if (stat.isDirectory() && recursive) {
+        const subFiles = await this.getAllFiles(fullPath, recursive);
+        files.push(...subFiles);
+      } else if (stat.isFile()) {
+        files.push(fullPath);
       }
-    } catch (error) {
-      console.error(`Error reading directory ${directory}:`, error);
-      throw error;
     }
-    
+
     return files;
   }
 
-  groupFilesIntoCardPairs(files) {
-    const validPairs = [];
-    const singleCards = [];
-    const processed = new Set();
-    
-    for (const file of files) {
-      if (processed.has(file)) continue;
-      
-      const baseName = this.getBaseName(file);
-      const frontFile = this.findMatchingFile(files, baseName, 'front');
-      const backFile = this.findMatchingFile(files, baseName, 'back');
-      
-      if (frontFile) {
-        const cardPair = {
-          id: baseName,
-          frontFile: path.basename(frontFile),
-          lotNumber: this.extractLotNumber(baseName),
-          iteration: this.extractIteration(baseName),
-          hasBack: false
-        };
-        
-        if (backFile) {
-          cardPair.backFile = path.basename(backFile);
-          cardPair.hasBack = true;
-          processed.add(backFile);
-          validPairs.push(cardPair);
-        } else {
-          singleCards.push(cardPair);
+  groupCardFiles(imageFiles) {
+    const cardMap = new Map();
+    const cards = [];
+    let validPairs = 0;
+    let singleCards = 0;
+
+    // Group files by lot-iteration pattern
+    imageFiles.forEach(filePath => {
+      const fileName = path.basename(filePath, path.extname(filePath));
+      const match = fileName.match(/^(.+)-(\d+)-(front|back)$/i);
+
+      if (match) {
+        const [, lotNumber, iteration, side] = match;
+        const key = `${lotNumber}-${iteration}`;
+
+        if (!cardMap.has(key)) {
+          cardMap.set(key, {
+            lotNumber,
+            iteration,
+            frontImage: null,
+            backImage: null
+          });
         }
-        
-        processed.add(frontFile);
+
+        const card = cardMap.get(key);
+        if (side.toLowerCase() === 'front') {
+          card.frontImage = filePath;
+        } else if (side.toLowerCase() === 'back') {
+          card.backImage = filePath;
+        }
       }
-    }
-    
-    return { validPairs, singleCards };
+    });
+
+    // Convert to array and count pairs vs singles
+    cardMap.forEach((card) => {
+      if (card.frontImage) {
+        cards.push({
+          frontImage: card.frontImage,
+          backImage: card.backImage,
+          lotNumber: card.lotNumber,
+          iteration: card.iteration
+        });
+
+        if (card.backImage) {
+          validPairs++;
+        } else {
+          singleCards++;
+        }
+      }
+    });
+
+    return { cards, validPairs, singleCards };
   }
 
-  getBaseName(filePath) {
-    const fileName = path.basename(filePath, path.extname(filePath));
-    // Remove -front or -back suffix
-    return fileName.replace(/-(?:front|back)$/, '');
-  }
-
-  findMatchingFile(files, baseName, suffix) {
-    const pattern = new RegExp(`${this.escapeRegex(baseName)}-${suffix}\\.(jpg|jpeg|png|gif|bmp|webp)$`, 'i');
-    return files.find(file => pattern.test(path.basename(file)));
-  }
-
-  escapeRegex(string) {
-    return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  }
-
-  extractLotNumber(baseName) {
-    // Extract lot number from patterns like "box1a-00003" -> "box1a"
-    const match = baseName.match(/^([^-]+)/);
-    return match ? match[1] : 'unknown';
-  }
-
-  extractIteration(baseName) {
-    // Extract iteration from patterns like "box1a-00003" -> "00003"
-    const match = baseName.match(/-([^-]+)$/);
-    return match ? match[1] : '001';
-  }
-
-  validateFilePath(filePath) {
+  async validateFile(filePath) {
     try {
-      return fs.existsSync(filePath) && fs.statSync(filePath).isFile();
+      const stats = await fs.stat(filePath);
+      return stats.isFile();
     } catch (error) {
       return false;
     }

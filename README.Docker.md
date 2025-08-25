@@ -1,206 +1,193 @@
 # CardCataloger Docker Setup
 
-This guide explains how to set up and run the CardCataloger application using Docker with GPU support for AI processing.
+This document explains how to run CardCataloger using Docker with full GPU acceleration support for AI processing.
 
 ## Prerequisites
 
-- Docker Engine 20.10+
-- Docker Compose V2
-- NVIDIA Container Toolkit (for GPU support)
-- NVIDIA GPU drivers
+1. **Docker & Docker Compose**
+   ```bash
+   # Install Docker (Ubuntu/Debian)
+   curl -fsSL https://get.docker.com -o get-docker.sh
+   sudo sh get-docker.sh
+   
+   # Install Docker Compose
+   sudo curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+   sudo chmod +x /usr/local/bin/docker-compose
+   ```
+
+2. **Nvidia GPU Support (Optional but Recommended)**
+   ```bash
+   # Install nvidia-docker2 for GPU acceleration
+   distribution=$(. /etc/os-release;echo $ID$VERSION_ID)
+   curl -s -L https://nvidia.github.io/nvidia-docker/gpgkey | sudo apt-key add -
+   curl -s -L https://nvidia.github.io/nvidia-docker/$distribution/nvidia-docker.list | sudo tee /etc/apt/sources.list.d/nvidia-docker.list
+   
+   sudo apt-get update && sudo apt-get install -y nvidia-docker2
+   sudo systemctl restart docker
+   ```
 
 ## Quick Start
 
-1. **Start the application:**
+1. **Setup the application**
    ```bash
-   ./scripts/start.sh
+   chmod +x docker-setup.sh
+   ./docker-setup.sh
    ```
 
-2. **Access the application:**
+2. **Configure environment variables**
+   ```bash
+   # Edit the .env file with your settings
+   nano .env
+   ```
+
+3. **Start the application**
+   ```bash
+   docker-compose up -d
+   ```
+
+4. **Access the application**
    - Frontend: http://localhost:8000
-   - Backend API: http://localhost:3000
+   - Backend API: http://localhost:3000/api
    - Ollama API: http://localhost:11434
 
-3. **Stop the application:**
-   ```bash
-   ./scripts/stop.sh
-   ```
+## Services
 
-## Components
+### Frontend (Port 8000)
+- React application with Nginx
+- Serves the web interface
+- Proxies API requests to backend
 
-### Services
+### Backend (Port 3000)
+- Express.js API server
+- Handles business logic and database operations
+- Communicates with Ollama for AI processing
 
-- **Frontend**: React application served by Nginx on port 8000
-- **Backend**: Node.js API server on port 3000
-- **MongoDB**: Database on port 27017
-- **Ollama**: AI service with GPU support on port 11434
+### Ollama (Port 11434)
+- AI processing service with GPU acceleration
+- Optimized for Nvidia RTX 3070 Ti
+- Automatically downloads required models on first run
 
-### GPU Support
+### MongoDB (Port 27017)
+- Database for storing card information
+- Persistent data storage with Docker volumes
 
-The Ollama service is configured with NVIDIA GPU support:
-- Uses `runtime: nvidia`
-- Maps all NVIDIA devices
-- Configured for compute and utility capabilities
+## GPU Configuration
 
-## Development vs Production
+The Ollama service is configured for optimal performance with Nvidia GPUs:
 
-### Production Mode (Default)
-- Uses production Dockerfiles
-- Optimized builds
-- Nginx serves static frontend files
-- No volume mounts
-
-### Development Mode
-To enable development mode with hot reloading:
-
-1. **Rename the override file:**
-   ```bash
-   mv docker-compose.override.yml.disabled docker-compose.override.yml
-   ```
-
-2. **Start in development mode:**
-   ```bash
-   docker compose up -d --build
-   ```
-
-3. **Access development servers:**
-   - Frontend: http://localhost:5173 (Vite dev server)
-   - Backend: http://localhost:3000 (with nodemon)
-
-**Warning**: Development mode uses volume mounts that can cause permission issues in some environments.
-
-## Configuration
-
-### Environment Variables
-
-Create a `.env` file or use the provided `.env.docker`:
-
-```bash
-# Database
-DATABASE_URL=mongodb://mongodb:27017/CardCataloger
-
-# JWT Secrets
-JWT_SECRET=your-secret-key
-REFRESH_TOKEN_SECRET=your-refresh-secret
-
-# eBay API (optional)
-EBAY_APP_ID=your_app_id
-EBAY_CERT_ID=your_cert_id
-EBAY_DEV_ID=your_dev_id
-EBAY_USER_TOKEN=your_token
-EBAY_SANDBOX=true
-
-# Ollama
-OLLAMA_BASE_URL=http://ollama:11434
+```yaml
+deploy:
+  resources:
+    reservations:
+      devices:
+        - driver: nvidia
+          count: 1
+          capabilities: [gpu]
 ```
 
-### GPU Configuration
-
-The application automatically detects and uses NVIDIA GPUs. Ensure:
-
-1. **NVIDIA drivers are installed:**
-   ```bash
-   nvidia-smi
-   ```
-
-2. **NVIDIA Container Toolkit is installed:**
-   ```bash
-   docker run --rm --gpus all nvidia/cuda:11.0-base nvidia-smi
-   ```
-
-## Troubleshooting
-
-### Common Issues
-
-1. **Frontend permission errors:**
-   - Ensure you're not using development mode in production
-   - Check that `docker-compose.override.yml` doesn't exist
-
-2. **Ollama GPU not detected:**
-   - Verify NVIDIA drivers: `nvidia-smi`
-   - Check container toolkit: `docker run --rm --gpus all nvidia/cuda:11.0-base nvidia-smi`
-
-3. **Database connection issues:**
-   - Ensure MongoDB container is healthy: `docker compose ps`
-   - Check logs: `docker compose logs mongodb`
-
-4. **Version warnings:**
-   - Update to Docker Compose V2: `docker compose version`
-
-### Logs
-
-View service logs:
+### Verifying GPU Access
 ```bash
-# All services
-docker compose logs -f
+# Check if Ollama can access GPU
+docker-compose exec ollama nvidia-smi
 
-# Specific service
-docker compose logs -f frontend
-docker compose logs -f backend
-docker compose logs -f ollama
-docker compose logs -f mongodb
+# View Ollama logs for GPU initialization
+docker-compose logs ollama
 ```
 
-### Health Checks
+## File Structure
 
-Check service health:
-```bash
-docker compose ps
 ```
-
-All services should show "healthy" status.
+CardCataloger/
+├── docker-compose.yml          # Main orchestration file
+├── Dockerfile.frontend         # Frontend container build
+├── Dockerfile.backend          # Backend container build
+├── nginx.conf                  # Nginx configuration
+├── .env                        # Environment variables
+├── card-images/               # Mount point for card images
+├── uploads/                   # Application uploads
+└── docker-setup.sh           # Setup script
+```
 
 ## Data Persistence
 
-- **MongoDB data**: Stored in `mongodb_data` volume
-- **Ollama models**: Stored in `ollama_data` volume
-- **Card images**: Stored in `card_images` volume
+All important data is stored in Docker volumes:
+- `cardcataloger-mongodb-data`: Database storage
+- `cardcataloger-ollama-data`: AI models and cache
+- `cardcataloger-backend-logs`: Application logs
 
-## Backup and Restore
+## Common Commands
 
-### Backup
 ```bash
-# Backup MongoDB
-docker compose exec mongodb mongodump --out /data/backup
+# Start all services
+docker-compose up -d
 
-# Backup volumes
-docker run --rm -v cardcataloger_mongodb_data:/data -v $(pwd):/backup alpine tar czf /backup/mongodb_backup.tar.gz /data
+# View logs
+docker-compose logs -f [service_name]
+
+# Stop all services
+docker-compose down
+
+# Restart a specific service
+docker-compose restart [service_name]
+
+# Update and rebuild
+docker-compose pull
+docker-compose build --no-cache
+docker-compose up -d
+
+# Clean up (removes containers and networks, keeps volumes)
+docker-compose down --remove-orphans
+
+# Full cleanup (WARNING: removes all data)
+docker-compose down -v --remove-orphans
 ```
 
-### Restore
-```bash
-# Restore MongoDB
-docker compose exec mongodb mongorestore /data/backup
+## Troubleshooting
 
-# Restore volumes
-docker run --rm -v cardcataloger_mongodb_data:/data -v $(pwd):/backup alpine tar xzf /backup/mongodb_backup.tar.gz -C /
-```
+### GPU Not Detected
+1. Verify nvidia-docker2 is installed
+2. Check Docker daemon configuration includes nvidia runtime
+3. Restart Docker service after installing nvidia-docker2
 
-## Performance Tuning
+### Ollama Model Download Issues
+1. Check internet connection
+2. Monitor logs: `docker-compose logs -f ollama`
+3. Models are large (several GB) - be patient on first startup
 
-### Ollama GPU Memory
-Adjust GPU memory usage in docker-compose.yml:
+### Database Connection Issues
+1. Ensure MongoDB container is running: `docker-compose ps`
+2. Check network connectivity between services
+3. Verify DATABASE_URL in backend environment
+
+### Port Conflicts
+If ports are already in use, modify docker-compose.yml:
 ```yaml
-ollama:
-  environment:
-    - OLLAMA_GPU_MEMORY=8GB  # Adjust based on your GPU
+ports:
+  - "8001:8000"  # Change external port
 ```
 
-### MongoDB Memory
-For large collections, increase MongoDB memory:
+## Production Considerations
+
+1. **Security**: Change default JWT secrets in .env
+2. **SSL**: Add SSL termination at nginx level
+3. **Backups**: Regular backup of MongoDB volume
+4. **Monitoring**: Add health check endpoints
+5. **Scaling**: Use Docker Swarm or Kubernetes for scaling
+
+## Performance Optimization
+
+### For Nvidia RTX 3070 Ti
+- 8GB VRAM is sufficient for most AI models
+- Ensure adequate system RAM (16GB+ recommended)
+- Use fast SSD storage for Docker volumes
+- Monitor GPU temperature and usage
+
+### Resource Limits
+Adjust in docker-compose.yml if needed:
 ```yaml
-mongodb:
-  command: mongod --wiredTigerCacheSizeGB 2
+deploy:
+  resources:
+    limits:
+      memory: 4G
+      cpus: '2.0'
 ```
-
-## Security
-
-### Production Deployment
-1. Change default JWT secrets
-2. Use strong MongoDB passwords
-3. Configure firewall rules
-4. Use HTTPS with reverse proxy
-5. Regular security updates
-
-### Network Security
-All services communicate through the internal `cardcataloger-network` bridge network.

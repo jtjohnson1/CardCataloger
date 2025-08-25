@@ -1,73 +1,60 @@
-import React, { useState, useEffect } from 'react';
-import { PlaceholderImage } from './placeholder-image';
+import { useState } from 'react'
+import { cn } from '@/lib/utils'
 
-interface ImageWithFallbackProps {
-  src?: string;
-  alt: string;
-  className?: string;
-  fallbackText?: string;
-  width?: number;
-  height?: number;
+interface ImageWithFallbackProps extends React.ImgHTMLAttributes<HTMLImageElement> {
+  fallbackClassName?: string
+  fallbackChildren?: React.ReactNode
 }
 
 export function ImageWithFallback({
   src,
   alt,
-  className = '',
-  fallbackText,
-  width = 200,
-  height = 280
+  className,
+  fallbackClassName,
+  fallbackChildren,
+  ...props
 }: ImageWithFallbackProps) {
-  const [hasError, setHasError] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
+  const [hasError, setHasError] = useState(false)
+  const [isLoading, setIsLoading] = useState(true)
 
-  // Reset error state when src changes
-  useEffect(() => {
-    if (src) {
-      setHasError(false);
-      setIsLoading(true);
-    } else {
-      setHasError(true);
-      setIsLoading(false);
-    }
-  }, [src]);
-
-  const handleLoad = () => {
-    setIsLoading(false);
-    setHasError(false);
-  };
+  console.log('ImageWithFallback - src:', src)
+  console.log('ImageWithFallback - hasError:', hasError)
+  console.log('ImageWithFallback - isLoading:', isLoading)
 
   const handleError = () => {
-    console.log('ImageWithFallback - Image failed to load:', src);
-    setIsLoading(false);
-    setHasError(true);
-  };
+    console.log('ImageWithFallback - Image failed to load:', src)
+    setHasError(true)
+    setIsLoading(false)
+  }
 
-  // Show fallback if no src, has error, or still loading
-  if (!src || hasError || isLoading) {
-    const displayText = fallbackText || alt || 'No Image';
+  const handleLoad = () => {
+    console.log('ImageWithFallback - Image loaded successfully:', src)
+    setHasError(false)
+    setIsLoading(false)
+  }
+
+  if (hasError) {
+    console.log('ImageWithFallback - Showing fallback for:', src)
     return (
-      <PlaceholderImage
-        width={width}
-        height={height}
-        text={displayText}
-        className={className}
-      />
-    );
+      <div className={cn('flex items-center justify-center bg-slate-100 dark:bg-slate-700', fallbackClassName)}>
+        {fallbackChildren || (
+          <div className="text-center p-4">
+            <div className="text-slate-400 mb-2">📷</div>
+            <div className="text-xs text-slate-500">Image not available</div>
+          </div>
+        )}
+      </div>
+    )
   }
 
   return (
     <img
       src={src}
       alt={alt}
-      className={className}
+      className={cn(className, isLoading && 'opacity-50')}
       onError={handleError}
       onLoad={handleLoad}
-      style={{
-        width: width,
-        height: height,
-        objectFit: 'cover'
-      }}
+      {...props}
     />
-  );
+  )
 }
