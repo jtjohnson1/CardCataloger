@@ -304,7 +304,7 @@ class CardService {
       // Send to Ollama for analysis
       const analysis = await OllamaService.analyzeCard(frontImageBuffer, backImageBuffer);
 
-      console.log(`CardService.analyzeCardWithAI - Analysis completed for card`);
+      console.log(`CardService.analyzeCardWithAI - AI analysis completed for card`);
       return analysis;
     } catch (error) {
       console.error('Error analyzing card with AI:', error);
