@@ -68,7 +68,7 @@ services:
       - DATABASE_URL=mongodb://mongodb:27017/CardCataloger
       - JWT_SECRET=${JWT_SECRET:-your-super-secret-jwt-key-change-this-in-production} # INPUT_REQUIRED {JWT secret key for authentication}
       - REFRESH_TOKEN_SECRET=${REFRESH_TOKEN_SECRET:-your-super-secret-refresh-key-change-this-too} # INPUT_REQUIRED {Refresh token secret key}
-      - EBAY_APP_ID=${EBAY_APP_ID:-your_ebay_app_id_here} # INPUT_REQUIRED {eBay API Application ID}
+      - EBAY_APP_ID=${EBAY_APP_ID:-your_ebay_app_id_here} # INPUT_REQUIRED {eBay API App ID}
       - EBAY_CERT_ID=${EBAY_CERT_ID:-your_ebay_cert_id_here} # INPUT_REQUIRED {eBay API Certificate ID}
       - EBAY_DEV_ID=${EBAY_DEV_ID:-your_ebay_dev_id_here} # INPUT_REQUIRED {eBay API Developer ID}
       - EBAY_USER_TOKEN=${EBAY_USER_TOKEN:-your_ebay_user_token_here} # INPUT_REQUIRED {eBay API User Token}
