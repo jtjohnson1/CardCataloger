@@ -35,7 +35,7 @@ docker compose up -d --build
 
 # Wait for services to be healthy
 echo "Waiting for services to be healthy..."
-sleep 15
+sleep 20
 
 # Check service status
 echo "Checking service status..."
@@ -45,11 +45,12 @@ docker compose ps
 OLLAMA_STATUS=$(docker compose ps ollama --format "table {{.Status}}" | tail -n 1)
 if [[ "$OLLAMA_STATUS" == *"healthy"* ]]; then
     echo "Ollama is healthy, setting up models..."
-    # Run the setup script inside the container
-    docker compose exec ollama sh -c "wget --quiet --tries=1 --spider http://localhost:11434/api/tags && echo 'Ollama ready for model installation'"
+    # Run the setup script inside the Ollama container
+    docker compose exec ollama /scripts/setup-ollama.sh
 else
-    echo "WARNING: Ollama is not healthy, skipping model installation"
-    echo "You can install models later by running: docker compose exec ollama /scripts/setup-ollama.sh"
+    echo "WARNING: Ollama is not healthy, but attempting to install models anyway..."
+    echo "Installing basic model..."
+    docker compose exec ollama ollama pull llava:7b
 fi
 
 # Final status check

@@ -1,24 +1,49 @@
-# Development overrides - Frontend intentionally excluded to use production build
+# Development environment overrides
 
 services:
+  # Backend development overrides
   backend:
     build:
       context: ./server
       dockerfile: Dockerfile.dev
-    volumes:
-      - ./server:/app:cached
-      - /app/node_modules
-      - ./card_images:/app/card_images:ro
     environment:
       - NODE_ENV=development
-      - DOCKER_CONTAINER=true
+    volumes:
+      - ./server:/app
+      - /app/node_modules
+    command: ["npm", "run", "dev"]
 
+  # Frontend development overrides  
+  frontend:
+    build:
+      context: ./client
+      dockerfile: Dockerfile.dev
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./client:/app
+      - /app/node_modules
+    environment:
+      - VITE_API_URL=http://localhost:3000
+
+  # MongoDB development overrides
   mongodb:
     volumes:
       - mongodb_dev_data:/data/db
-    ports:
-      - "27017:27017"
+
+  # Ollama development overrides (keep GPU support)
+  ollama:
+    runtime: nvidia
+    environment:
+      - OLLAMA_DEBUG=INFO
+    devices:
+      - /dev/nvidia0:/dev/nvidia0
+      - /dev/nvidiactl:/dev/nvidiactl
+      - /dev/nvidia-modeset:/dev/nvidia-modeset
+      - /dev/nvidia-uvm:/dev/nvidia-uvm
+      - /dev/nvidia-uvm-tools:/dev/nvidia-uvm-tools
 
 volumes:
   mongodb_dev_data:
-    driver: local
+    external: true
+    name: cardcataloger_mongodb_dev_data
