@@ -17,63 +17,72 @@ class PriceService {
         throw new Error(`Card not found: ${cardId}`);
       }
 
-      // Mock pricing data for now (in real implementation, this would call eBay API)
-      const mockPricing = {
+      // Build search query from card details
+      const searchQuery = `${card.name} ${card.year} ${card.manufacturer}`.trim();
+
+      // Get real eBay data
+      const [recentSales, activeListings] = await Promise.all([
+        this.ebayService.searchCompletedListings(searchQuery),
+        this.ebayService.searchActiveListings(searchQuery)
+      ]);
+
+      // Calculate real pricing statistics
+      const allPrices = [...recentSales, ...activeListings];
+      const averagePrice = this.calculateAveragePrice(allPrices);
+      const medianPrice = this.calculateMedianPrice(allPrices);
+      const priceRange = {
+        min: Math.min(...allPrices.map(p => p.price)),
+        max: Math.max(...allPrices.map(p => p.price))
+      };
+
+      // Determine trend (simplified - compare recent vs older sales)
+      const trend = this.calculatePriceTrend(recentSales);
+
+      const pricing = {
         cardId: cardId,
-        averagePrice: Math.random() * 100 + 10, // Random price between $10-$110
-        medianPrice: Math.random() * 80 + 15,   // Random price between $15-$95
-        priceRange: {
-          min: 5.00,
-          max: 150.00
-        },
+        averagePrice,
+        medianPrice,
+        priceRange,
         sources: {
           ebay: {
-            recentSales: [
-              {
-                source: 'eBay',
-                price: Math.random() * 50 + 20,
-                condition: 'Near Mint',
-                date: new Date(Date.now() - Math.random() * 30 * 24 * 60 * 60 * 1000).toISOString(),
-                title: `${card.name} - ${card.year}`,
-                shipping: 3.99
-              },
-              {
-                source: 'eBay',
-                price: Math.random() * 40 + 15,
-                condition: 'Excellent',
-                date: new Date(Date.now() - Math.random() * 60 * 24 * 60 * 60 * 1000).toISOString(),
-                title: `${card.name} Card`,
-                shipping: 4.50
-              }
-            ],
-            activeListings: [
-              {
-                source: 'eBay',
-                price: Math.random() * 60 + 25,
-                condition: 'Mint',
-                date: new Date().toISOString(),
-                title: `${card.name} PSA Graded`,
-                shipping: 5.99
-              }
-            ],
+            recentSales,
+            activeListings,
             lastUpdated: new Date().toISOString()
           },
           other: {
-            listings: [],
+            listings: [], // Add other marketplace integrations here
             lastUpdated: new Date().toISOString()
           }
         },
-        trend: ['up', 'down', 'stable'][Math.floor(Math.random() * 3)],
+        trend,
         lastUpdated: new Date().toISOString()
       };
 
-      console.log(`PriceService.getCardPricing - Generated pricing for card: ${card.name}`);
-      return mockPricing;
+      console.log(`PriceService.getCardPricing - Generated real pricing for card: ${card.name}`);
+      return pricing;
 
     } catch (error) {
       console.error('Error in PriceService.getCardPricing:', error);
       throw error;
     }
+  }
+
+  calculatePriceTrend(recentSales) {
+    if (recentSales.length < 2) return 'stable';
+
+    // Simple trend calculation - compare first half vs second half of recent sales
+    const midPoint = Math.floor(recentSales.length / 2);
+    const earlierSales = recentSales.slice(0, midPoint);
+    const laterSales = recentSales.slice(midPoint);
+
+    const earlierAvg = this.calculateAveragePrice(earlierSales);
+    const laterAvg = this.calculateAveragePrice(laterSales);
+
+    const percentChange = ((laterAvg - earlierAvg) / earlierAvg) * 100;
+
+    if (percentChange > 5) return 'up';
+    if (percentChange < -5) return 'down';
+    return 'stable';
   }
 
   async refreshCardPricing(cardId) {

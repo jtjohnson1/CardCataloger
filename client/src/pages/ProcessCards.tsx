@@ -24,8 +24,8 @@ import { scanDirectory, processCards, getProcessingProgress, CardPair, ScanResul
 export function ProcessCards() {
   const { toast } = useToast();
 
-  // Directory scanning state - Start with a working default
-  const [directory, setDirectory] = useState('/app/test_data');
+  // Directory scanning state - Start with empty directory
+  const [directory, setDirectory] = useState('');
   const [includeSubdirectories, setIncludeSubdirectories] = useState(true);
   const [isScanning, setIsScanning] = useState(false);
   const [scannedCards, setScannedCards] = useState<ScanResult | null>(null);
@@ -37,11 +37,6 @@ export function ProcessCards() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [processingJobId, setProcessingJobId] = useState<string | null>(null);
   const [processingProgress, setProcessingProgress] = useState<ProcessingProgress | null>(null);
-
-  // Auto-scan on component mount to show available test data
-  useEffect(() => {
-    handleScanDirectory();
-  }, []);
 
   const handleScanDirectory = async () => {
     if (!directory.trim()) {
@@ -362,10 +357,10 @@ export function ProcessCards() {
               id="directory"
               value={directory}
               onChange={(e) => setDirectory(e.target.value)}
-              placeholder="/app/test_data"
+              placeholder="/path/to/your/card/images"
             />
             <div className="text-sm text-muted-foreground">
-              The system will automatically find the correct test data directory. Common paths: /app/test_data, /tmp/card-images, or your custom directory
+              Enter the full path to your card images directory. Images should follow the naming pattern: lot-iteration-front.jpg
             </div>
           </div>
 
