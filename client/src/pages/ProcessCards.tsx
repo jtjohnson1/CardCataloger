@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from '../components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { Input } from '../components/ui/input';
@@ -8,12 +8,12 @@ import { Progress } from '../components/ui/progress';
 import { Badge } from '../components/ui/badge';
 import { Separator } from '../components/ui/separator';
 import { Alert, AlertDescription } from '../components/ui/alert';
-import { 
-  Folder, 
-  Search, 
-  Play, 
-  CheckCircle, 
-  AlertCircle, 
+import {
+  Folder,
+  Search,
+  Play,
+  CheckCircle,
+  AlertCircle,
   FileImage,
   Clock,
   Zap
@@ -23,20 +23,25 @@ import { scanDirectory, processCards, getProcessingProgress, CardPair, ScanResul
 
 export function ProcessCards() {
   const { toast } = useToast();
-  
-  // Directory scanning state
-  const [directory, setDirectory] = useState('/tmp/test-cards');
+
+  // Directory scanning state - Start with a working default
+  const [directory, setDirectory] = useState('/app/test_data');
   const [includeSubdirectories, setIncludeSubdirectories] = useState(true);
   const [isScanning, setIsScanning] = useState(false);
   const [scannedCards, setScannedCards] = useState<ScanResult | null>(null);
-  
+
   // Card selection state
   const [selectedCards, setSelectedCards] = useState<string[]>([]);
-  
+
   // Processing state
   const [isProcessing, setIsProcessing] = useState(false);
   const [processingJobId, setProcessingJobId] = useState<string | null>(null);
   const [processingProgress, setProcessingProgress] = useState<ProcessingProgress | null>(null);
+
+  // Auto-scan on component mount to show available test data
+  useEffect(() => {
+    handleScanDirectory();
+  }, []);
 
   const handleScanDirectory = async () => {
     if (!directory.trim()) {
@@ -51,7 +56,7 @@ export function ProcessCards() {
     try {
       setIsScanning(true);
       console.log('Scanning directory:', directory);
-      
+
       const response = await scanDirectory({
         directory: directory.trim(),
         includeSubdirectories
@@ -65,7 +70,7 @@ export function ProcessCards() {
       }
 
       const scanResult = response.data;
-      
+
       // Ensure arrays exist
       if (!scanResult.validPairs) {
         scanResult.validPairs = [];
@@ -78,7 +83,7 @@ export function ProcessCards() {
       setSelectedCards([]); // Reset selection
 
       const totalCards = scanResult.validPairs.length + scanResult.singleCards.length;
-      
+
       toast({
         title: "Scan Complete",
         description: `Found ${totalCards} cards (${scanResult.validPairs.length} pairs, ${scanResult.singleCards.length} singles)`,
@@ -107,7 +112,7 @@ export function ProcessCards() {
 
   const handleSelectAll = (checked: boolean) => {
     if (!scannedCards) return;
-    
+
     if (checked) {
       const allCardIds = [
         ...scannedCards.validPairs.map(card => card.id),
@@ -131,7 +136,7 @@ export function ProcessCards() {
 
     try {
       setIsProcessing(true);
-      
+
       const response = await processCards({
         selectedCards,
         directory
@@ -139,10 +144,10 @@ export function ProcessCards() {
 
       if (response.success && response.jobId) {
         setProcessingJobId(response.jobId);
-        
+
         // Start polling for progress
         pollProcessingProgress(response.jobId);
-        
+
         toast({
           title: "Processing Started",
           description: `Processing ${selectedCards.length} cards`,
@@ -194,7 +199,7 @@ export function ProcessCards() {
     if (!scannedCards) return null;
 
     const allCards = [...scannedCards.validPairs, ...scannedCards.singleCards];
-    
+
     if (allCards.length === 0) {
       return (
         <Alert>
@@ -237,7 +242,7 @@ export function ProcessCards() {
                 checked={selectedCards.includes(card.id)}
                 onCheckedChange={(checked) => handleCardSelection(card.id, checked as boolean)}
               />
-              
+
               <div className="flex-1 min-w-0">
                 <div className="flex items-center space-x-2">
                   <FileImage className="h-4 w-4 text-muted-foreground" />
@@ -357,8 +362,11 @@ export function ProcessCards() {
               id="directory"
               value={directory}
               onChange={(e) => setDirectory(e.target.value)}
-              placeholder="/path/to/card/images"
+              placeholder="/app/test_data"
             />
+            <div className="text-sm text-muted-foreground">
+              The system will automatically find the correct test data directory. Common paths: /app/test_data, /tmp/card-images, or your custom directory
+            </div>
           </div>
 
           <div className="flex items-center space-x-2">
@@ -370,8 +378,8 @@ export function ProcessCards() {
             <Label htmlFor="subdirectories">Include subdirectories (recursive scan)</Label>
           </div>
 
-          <Button 
-            onClick={handleScanDirectory} 
+          <Button
+            onClick={handleScanDirectory}
             disabled={isScanning}
             className="w-full"
           >
@@ -390,7 +398,7 @@ export function ProcessCards() {
               <span>Scan Results</span>
             </CardTitle>
             <CardDescription>
-              Found {(scannedCards.validPairs?.length || 0) + (scannedCards.singleCards?.length || 0)} cards 
+              Found {(scannedCards.validPairs?.length || 0) + (scannedCards.singleCards?.length || 0)} cards
               ({scannedCards.validPairs?.length || 0} pairs, {scannedCards.singleCards?.length || 0} singles)
             </CardDescription>
           </CardHeader>
@@ -404,7 +412,7 @@ export function ProcessCards() {
       {scannedCards && (scannedCards.validPairs?.length > 0 || scannedCards.singleCards?.length > 0) && (
         <Card>
           <CardContent className="pt-6">
-            <Button 
+            <Button
               onClick={handleProcessCards}
               disabled={selectedCards.length === 0 || isProcessing}
               className="w-full"

@@ -189,20 +189,30 @@ class CardService {
   async scanDirectory(directory, includeSubdirectories = false) {
     try {
       console.log(`CardService.scanDirectory called - Directory: ${directory}, Include subdirs: ${includeSubdirectories}`);
-      
-      // Handle common test directory paths and provide helpful suggestions
-      if (directory === '/tmp/test-cards' || directory === '/app/test_data') {
-        const testDataDir = path.join(process.cwd(), 'test_data');
-        console.log(`Converting test directory path from ${directory} to ${testDataDir}`);
-        directory = testDataDir;
+
+      // Get the actual test data directory path
+      const actualTestDataDir = path.join(process.cwd(), 'test_data');
+      console.log(`Actual test data directory: ${actualTestDataDir}`);
+
+      // Handle common test directory paths and convert them to the actual path
+      const commonTestPaths = [
+        '/tmp/test-cards',
+        '/opt/card-images',
+        '/app/test_data',
+        '/app/test_data/more'
+      ];
+
+      // If the requested directory is a common test path or doesn't exist, use the actual test data directory
+      if (commonTestPaths.includes(directory) || !fs.existsSync(directory)) {
+        console.log(`Converting directory path from ${directory} to ${actualTestDataDir}`);
+        directory = actualTestDataDir;
       }
-      
-      // Check if directory exists
+
+      // Double-check if the directory exists after conversion
       if (!fs.existsSync(directory)) {
-        // Provide helpful error message with suggestions
-        const testDataDir = path.join(process.cwd(), 'test_data');
+        // Provide helpful error message with the actual path
         const suggestions = [
-          `Try using: ${testDataDir}`,
+          `Try using: ${actualTestDataDir}`,
           'Or create your own directory with card images following the naming pattern: <lot>-<iteration>-front.jpg'
         ];
         
@@ -281,8 +291,8 @@ class CardService {
           // 2. Send to Ollama for AI analysis
           // 3. Extract card details
           // 4. Save to database
-          
-          // For now, create a mock card
+
+          // For now, create a mock card with proper image paths
           const mockCard = {
             name: `Mock Card ${cardId}`,
             manufacturer: 'Unknown',
@@ -294,10 +304,12 @@ class CardService {
             condition: 'Unknown',
             estimatedValue: 0,
             images: {
-              front: `${cardId}-front.jpg`
+              front: `${cardId}-front.jpg`,
+              back: `${cardId}-back.jpg`
             },
             fileInfo: {
               frontFile: `${cardId}-front.jpg`,
+              backFile: `${cardId}-back.jpg`,
               lotNumber: cardId.split('-')[0] || 'unknown',
               iteration: cardId.split('-')[1] || '001'
             }

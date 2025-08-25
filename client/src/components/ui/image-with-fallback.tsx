@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { PlaceholderImage } from './placeholder-image';
 
 interface ImageWithFallbackProps {
-  src: string;
+  src?: string;
   alt: string;
   className?: string;
   fallbackText?: string;
@@ -10,40 +10,47 @@ interface ImageWithFallbackProps {
   height?: number;
 }
 
-export function ImageWithFallback({ 
-  src, 
-  alt, 
-  className = '', 
-  fallbackText = 'Image', 
-  width = 200, 
-  height = 280 
+export function ImageWithFallback({
+  src,
+  alt,
+  className = '',
+  fallbackText,
+  width = 200,
+  height = 280
 }: ImageWithFallbackProps) {
   const [hasError, setHasError] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
-  console.log('ImageWithFallback - src:', src);
-  console.log('ImageWithFallback - hasError:', hasError);
-  console.log('ImageWithFallback - isLoading:', isLoading);
-
-  const handleError = () => {
-    console.log('ImageWithFallback - Image failed to load:', src);
-    setHasError(true);
-    setIsLoading(false);
-  };
+  // Reset error state when src changes
+  useEffect(() => {
+    if (src) {
+      setHasError(false);
+      setIsLoading(true);
+    } else {
+      setHasError(true);
+      setIsLoading(false);
+    }
+  }, [src]);
 
   const handleLoad = () => {
-    console.log('ImageWithFallback - Image loaded successfully:', src);
     setIsLoading(false);
     setHasError(false);
   };
 
-  if (!src || hasError) {
-    console.log('ImageWithFallback - Showing fallback for:', src);
+  const handleError = () => {
+    console.log('ImageWithFallback - Image failed to load:', src);
+    setIsLoading(false);
+    setHasError(true);
+  };
+
+  // Show fallback if no src, has error, or still loading
+  if (!src || hasError || isLoading) {
+    const displayText = fallbackText || alt || 'No Image';
     return (
       <PlaceholderImage
         width={width}
         height={height}
-        text={fallbackText}
+        text={displayText}
         className={className}
       />
     );
@@ -56,8 +63,7 @@ export function ImageWithFallback({
       className={className}
       onError={handleError}
       onLoad={handleLoad}
-      style={{ 
-        display: isLoading ? 'none' : 'block',
+      style={{
         width: width,
         height: height,
         objectFit: 'cover'
